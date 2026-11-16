@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.7
+
+### Changed
+- Mask-direction paste chunked (default 400 chars / 40ms): amortizes host
+  rendering cost of one huge input event (console/Qoder/WorkBuddy stutter /
+  truncation-then-complete). Blocks appear whole, not char-by-char.
+  Config: guard.paste_chunk_size (0 = one-shot), guard.paste_chunk_delay_ms
+
 ## 0.4.6
 
 ### Fixed

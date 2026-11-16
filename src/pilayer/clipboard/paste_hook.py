@@ -100,6 +100,7 @@ class PasteHook:
         self._proc = None
         self._thread = None
         self._swallowed = set()
+        self._last_combo = (VK_V, True, False)
 
     def start(self):
         self._thread = threading.Thread(target=self._run, name="pilayer-paste", daemon=True)
@@ -175,6 +176,7 @@ class PasteHook:
                     shift = _user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
                     if (ks.vkCode == VK_V and ctrl) or (ks.vkCode == VK_INSERT and shift):
                         self._swallowed.add(ks.vkCode)
+                        self._last_combo = (ks.vkCode, bool(ctrl), bool(shift))
                         threading.Thread(
                             target=self._worker, args=(ks.vkCode, bool(ctrl), bool(shift)),
                             daemon=True,

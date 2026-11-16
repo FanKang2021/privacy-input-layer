@@ -17,6 +17,8 @@ DEFAULTS = {
         "auto_detect": True,
         "paste_hook": True,
         "paste_injection": True,
+        "paste_chunk_size": 400,
+        "paste_chunk_delay_ms": 40,
         "lazy_restore": True,
     },
     "ai_targets": {

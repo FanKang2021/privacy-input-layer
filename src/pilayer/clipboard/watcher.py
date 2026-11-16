@@ -87,6 +87,9 @@ class ClipboardWatcher:
         self.ai_focused = False
         self._hdrop_last: list[tuple[str, str]] | None = None
         self._pending_inject: str | None = None
+        self._chunk_queue: deque = deque()
+        self._chunk_next_at = 0.0
+        self.resend_cb = None
         self.events: deque = deque(maxlen=20)
         self._hwnd = None
         self._suppress_seq = None
@@ -337,13 +340,26 @@ class ClipboardWatcher:
         if target == text:
             return False
         if direction == "mask":
-            # 掩码态上剪贴板是安全的：走真实粘贴，一次性、无逐字渲染、无快捷键污染
-            self._write_text(target)
+            # 掩码态上剪贴板是安全的：走真实粘贴；大文本分块摊销宿主渲染成本
+            size = int(self.cfg.get("paste_chunk_size", 400) or 0)
+            if size <= 0 or len(target) <= size:
+                self._write_text(target)
+                self._chunk_queue.clear()
+                return False
+            chunks = [target[i:i + size] for i in range(0, len(target), size)]
+            self._write_text(chunks[0])
+            self._chunk_queue = deque(chunks[1:])
+            self._chunk_next_at = time.time() + self.cfg.get("paste_chunk_delay_ms", 40) / 1000
             return False
         self._pending_inject = target
         return True
 
     def drain_injection(self):
+        if self._chunk_queue and self.resend_cb and time.time() >= self._chunk_next_at:
+            chunk = self._chunk_queue.popleft()
+            self._write_text(chunk)
+            self._chunk_next_at = time.time() + self.cfg.get("paste_chunk_delay_ms", 40) / 1000
+            self.resend_cb()
         target = getattr(self, "_pending_inject", None)
         if not target:
             return

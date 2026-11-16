@@ -63,6 +63,7 @@ class Application:
         if self.cfg["guard"].get("paste_hook", True):
             from .clipboard.paste_hook import PasteHook
             self.paste_hook = PasteHook(self.watcher.handle_paste, self.watcher.drain_injection)
+            self.watcher.resend_cb = lambda: self.paste_hook._resend(*self.paste_hook._last_combo)
         self.icon = None
 
     def _on_learn(self, proc: str):

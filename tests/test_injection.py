@@ -125,3 +125,19 @@ def test_resend_adapts_to_physical_modifiers(monkeypatch):
     monkeypatch.setattr(ph._user32, "GetAsyncKeyState", lambda vk: 0)
     hook._resend(0x56, True, False)
     assert sent[-1] == [0x11, 0x56, 0x56, 0x11]
+
+
+def test_large_mask_paste_chunked(tmp_path, monkeypatch):
+    import time as _t
+    w, state, sent = make_watcher(tmp_path, monkeypatch, ai=True)
+    long_text = ("line 0 13800138000" + chr(10)) * 60
+    state["text"] = long_text
+    calls = []
+    w.resend_cb = lambda: calls.append(1)
+    assert w.handle_paste() is False
+    first = state["text"]
+    assert len(first) == 400 and w._chunk_queue
+    _t.sleep(0.06)
+    w.drain_injection()
+    assert calls and state["text"] != first
+    assert len(state["text"]) == 400
