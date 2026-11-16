@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.3
+
+### Changed
+- Mask-direction paste now writes masked text to clipboard and re-sends the
+  real Ctrl+V: one-shot paste (no char-by-char rendering), no shortcut
+  pollution; clipboard holds only masked text (zero-plaintext guarantee kept)
+- Restore-direction keeps injection (plaintext off clipboard) but synthesizes
+  Ctrl/Shift/Alt keyup before injecting, eliminating stray shortcuts
+  (e.g. WorkBuddy settings dialog opening on paste)
+
+### Notes
+- Restore-direction injection renders char-by-char in some apps: accepted
+  privacy trade-off (plaintext never touches clipboard/history/cloud sync)
+
 ## 0.4.2
 
 ### Fixed

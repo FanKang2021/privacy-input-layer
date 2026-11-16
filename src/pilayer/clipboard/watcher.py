@@ -314,25 +314,32 @@ class ClipboardWatcher:
                 if r.count:
                     kinds = "/".join(sorted(set(r.kinds)))
                     self.events.appendleft(f"{time.strftime('%H:%M:%S')} masked {r.count} ({kinds})")
+                direction = "mask"
             else:
                 r = self.masker.restore(text)
                 target = r.text
                 if r.count:
                     self.events.appendleft(f"{time.strftime('%H:%M:%S')} restored {r.count}")
+                direction = "restore"
         elif self.cfg.get("auto_restore") and self.masker.has_placeholder(text):
             r = self.masker.restore(text)
             target = r.text
             if r.count:
                 self.events.appendleft(f"{time.strftime('%H:%M:%S')} restored {r.count}")
+            direction = "restore"
         else:
             r = self.masker.mask(text)
             target = r.text
             if r.count:
                 kinds = "/".join(sorted(set(r.kinds)))
                 self.events.appendleft(f"{time.strftime('%H:%M:%S')} masked {r.count} ({kinds})")
+            direction = "mask"
         if target == text:
             return False
-        # 不在钩子回调内同步 SendInput（会被丢弃），标记后由泵循环延迟注入
+        if direction == "mask":
+            # 掩码态上剪贴板是安全的：走真实粘贴，一次性、无逐字渲染、无快捷键污染
+            self._write_text(target)
+            return False
         self._pending_inject = target
         return True
 
@@ -342,14 +349,8 @@ class ClipboardWatcher:
             return
         self._pending_inject = None
         from . import paste_hook
-        # 等物理 Ctrl/Shift 释放再注入，否则注入字符变成 Ctrl+<char> 快捷键
-        deadline = time.time() + 0.5
-        while time.time() < deadline and (
-            paste_hook._user32.GetAsyncKeyState(0x11) & 0x8000
-            or paste_hook._user32.GetAsyncKeyState(0x10) & 0x8000
-        ):
-            time.sleep(0.01)
-        time.sleep(0.02)
+        # 合成释放修饰键：无论用户是否仍按住 Ctrl/Shift，注入字符都不带修饰
+        paste_hook.release_modifiers()
         ok = paste_hook.send_unicode(target)
         log.info("paste inject drain ok=%s len=%d", ok, len(target))
         if not ok:

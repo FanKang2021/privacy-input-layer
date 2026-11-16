@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "privacy-input-layer"
-version = "0.4.2"
+version = "0.4.3"
 description = "AI 隐私输入层：在内容进入任何 AI 客户端之前完成文本/图片/文件脱敏，本地运行，一键还原"
 readme = "README.md"
 license = { text = "MIT" }

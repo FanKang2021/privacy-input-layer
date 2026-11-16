@@ -49,6 +49,17 @@ _user32.SendInput.argtypes = [ctypes.c_uint, ctypes.POINTER(INPUT), ctypes.c_int
 _user32.SendInput.restype = ctypes.c_uint
 
 
+def release_modifiers():
+    """合成 Ctrl/Shift/Alt keyup，保证后续注入字符不带修饰（防快捷键污染）。"""
+    inputs = []
+    for code in (VK_CONTROL, VK_SHIFT, 0x12):
+        inp = INPUT(type=INPUT_KEYBOARD)
+        inp.union.ki = KEYBDINPUT(code, 0, KEYEVENTF_KEYUP, 0, PasteHook.MAGIC)
+        inputs.append(inp)
+    arr = (INPUT * len(inputs))(*inputs)
+    _user32.SendInput(len(inputs), arr, ctypes.sizeof(INPUT))
+
+
 def send_unicode(text: str) -> bool:
     """以 UTF-16 code unit 逐字符注入（含代理对），不经过剪贴板。"""
     units = text.encode("utf-16-le")

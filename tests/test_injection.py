@@ -39,37 +39,35 @@ def make_watcher(tmp_path, monkeypatch, ai=True, injection=True):
     return w, state, sent
 
 
-def test_inject_masked_into_ai_clipboard_untouched(tmp_path, monkeypatch):
+def test_mask_direction_uses_clipboard_one_shot_paste(tmp_path, monkeypatch):
     w, state, sent = make_watcher(tmp_path, monkeypatch, ai=True)
     state["text"] = "call 13800138000"
-    assert w.handle_paste() is True
-    w.drain_injection()
-    assert "[PHONE_" in sent[0]
-    assert state["text"] == "call 13800138000"  # 剪贴板零明文写入
+    assert w.handle_paste() is False  # worker 补发真实 Ctrl+V，一次性粘贴
+    assert "[PHONE_" in state["text"]  # 剪贴板为掩码态（安全）
+    assert sent == []
 
 
-def test_inject_restored_outside_ai_clipboard_untouched(tmp_path, monkeypatch):
+def test_restore_direction_injects_plaintext_off_clipboard(tmp_path, monkeypatch):
     w, state, sent = make_watcher(tmp_path, monkeypatch, ai=False)
     state["text"] = "call 13800138000"
     w.ai_focused = True
     w.handle_paste()
-    w.drain_injection()
-    state["text"] = sent[0]  # 模拟剪贴板处于掩码态（复制事件所写）
     masked = state["text"]
     w.ai_focused = False
     assert w.handle_paste() is True
     w.drain_injection()
     assert sent[-1] == "call 13800138000"
-    assert state["text"] == masked  # 占位符留在剪贴板
+    assert state["text"] == masked  # 明文不进剪贴板
 
 
 def test_injection_failure_falls_back_to_clipboard(tmp_path, monkeypatch):
-    w, state, sent = make_watcher(tmp_path, monkeypatch, ai=True)
+    w, state, sent = make_watcher(tmp_path, monkeypatch, ai=False)
     monkeypatch.setattr(paste_hook, "send_unicode", lambda t: False)
-    state["text"] = "call 13800138000"
+    state["text"] = "call [PHONE_1]"
+    w.masker.store.get_or_create("PHONE", "13800138000")
     assert w.handle_paste() is True
     w.drain_injection()
-    assert "[PHONE_" in state["text"]
+    assert state["text"] == "call 13800138000"
 
 
 def test_no_transform_passes_through(tmp_path, monkeypatch):
