@@ -30,6 +30,14 @@ BUNDLES = [
 ]
 
 
+def _ax_trusted() -> bool:
+    try:
+        import ApplicationServices as AS
+        return bool(AS.AXIsProcessTrusted())
+    except Exception:
+        return False
+
+
 def classify_mac(bundle: str, name: str, cfg: dict) -> bool:
     t_cfg = cfg.get("ai_targets", {})
     if bundle.lower() in [b.lower() for b in BUNDLES + t_cfg.get("processes", [])]:
@@ -94,7 +102,7 @@ class MacGuard:
         self._stop = threading.Event()
         self._pb = NSPasteboard.generalPasteboard()
         self._change = self._pb.changeCount()
-        self._trusted = Quartz.AXIsProcessTrusted()
+        self._trusted = _ax_trusted()
         self.icon = None
 
     # ---------- clipboard ----------

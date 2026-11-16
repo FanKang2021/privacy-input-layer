@@ -7,6 +7,7 @@ global input injection / foreground queries, so the guard degrades honestly.
 
 import logging
 import os
+import queue
 import shutil
 import subprocess
 import threading
@@ -61,6 +62,8 @@ class LinuxGuard:
         self._sel_text = None
         self._read_result = None
         self._read_done = threading.Event()
+        self._write_done = threading.Event()
+        self._cmds = queue.Queue()
         self._last_clip = None
         if not self.wayland:
             from Xlib import display, X
@@ -95,10 +98,10 @@ class LinuxGuard:
         if self.wayland:
             r = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True)
             return r.stdout if r.returncode == 0 else None
+        # python-xlib Display 非线程安全：所有 X 调用串行化到 loop 线程
         self._read_done.clear()
         self._read_result = None
-        self.win.convert_selection(self.CLIP, self.UTF8, self.PROP, self._X.CurrentTime)
-        self.d.flush()
+        self._cmds.put(("read", None))
         if not self._read_done.wait(0.6):
             return None
         return self._read_result
@@ -108,9 +111,9 @@ class LinuxGuard:
             subprocess.run(["wl-copy"], input=text, text=True, capture_output=True)
             self._last_clip = text
             return
-        self._sel_text = text
-        self.win.set_selection_owner(self.CLIP, self._X.CurrentTime)
-        self.d.flush()
+        self._write_done.clear()
+        self._cmds.put(("write", text))
+        self._write_done.wait(0.3)
 
     # ---------- focus ----------
 
@@ -203,6 +206,24 @@ class LinuxGuard:
     def _loop(self):
         from Xlib import X
         while not self._stop.is_set():
+            try:
+                kind, payload = self._cmds.get_nowait()
+            except queue.Empty:
+                kind = None
+            if kind == "write":
+                self._sel_text = payload
+                self.win.set_selection_owner(self.CLIP, X.CurrentTime)
+                self.d.flush()
+                self._write_done.set()
+            elif kind == "read":
+                self.win.convert_selection(self.CLIP, self.UTF8, self.PROP, X.CurrentTime)
+                self.d.flush()
+            elif kind == "key":
+                from Xlib.ext import xtest
+                mod = X.ControlMask if payload == self._kc_v else X.ShiftMask
+                xtest.fake_input(self.d, X.KeyPress, payload, mod)
+                xtest.fake_input(self.d, X.KeyRelease, payload, mod)
+                self.d.flush()
             while self.d.pending_events():
                 ev = self.d.next_event()
                 if ev.type == X.SelectionNotify:
@@ -229,13 +250,8 @@ class LinuxGuard:
             self._stop.wait(0.02)
 
     def _paste_worker(self, detail):
-        from Xlib import X
-        from Xlib.ext import xtest
         if not self._handle_paste():
-            mod = X.ControlMask if detail == self._kc_v else X.ShiftMask
-            xtest.fake_input(self.d, X.KeyPress, detail, mod)
-            xtest.fake_input(self.d, X.KeyRelease, detail, mod)
-            self.d.flush()
+            self._cmds.put(("key", detail))
 
     def _wayland_loop(self):
         while not self._stop.wait(0.3):
