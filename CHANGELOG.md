@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.9
+
+### Added
+- Paste direction decision logging (direction/ai_focused/len/chunk size) to
+  diagnose restore-vs-mask path selection under rapid focus switches
+
+### Fixed
+- Release build reliability: stop running guard before PyInstaller overwrite
+  (locked exe caused silent stale-binary builds)
+
 ## 0.4.8
 
 ### Added

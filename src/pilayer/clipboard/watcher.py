@@ -339,6 +339,9 @@ class ClipboardWatcher:
             direction = "mask"
         if target == text:
             return False
+        log.info("paste direction=%s ai=%s len=%d chunks=%s",
+                 direction, self.ai_focused, len(target),
+                 int(self.cfg.get("paste_chunk_size", 400) or 0))
         if direction == "mask":
             # 掩码态上剪贴板是安全的：走真实粘贴；大文本分块摊销宿主渲染成本
             size = int(self.cfg.get("paste_chunk_size", 400) or 0)
