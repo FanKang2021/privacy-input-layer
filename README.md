@@ -8,7 +8,9 @@
 
 100% local: regex rules + local OCR + local sqlite mapping. Your originals never leave your machine.
 
-[中文文档](README.zh.md)
+![schematic demo](docs/demo.gif)
+
+[中文文档](README.zh.md) · [Launch kit](docs/launch.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ## Why
 

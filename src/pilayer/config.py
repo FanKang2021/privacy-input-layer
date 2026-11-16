@@ -57,6 +57,7 @@ DEFAULTS = {
         "phone": True,
         "idcard": True,
         "bankcard": True,
+        "bankcard_bin": True,
         "email": True,
         "privkey": True,
         "ip": True,

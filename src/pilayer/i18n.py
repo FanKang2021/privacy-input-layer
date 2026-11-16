@@ -27,6 +27,12 @@ STRINGS = {
         "learned": "Learned AI client: {proc}",
         "autostart_on": "Start with Windows: on",
         "autostart_off": "Start with Windows: off",
+        "mode_focus": "Mode: focus-aware",
+        "mode_always": "Mode: always-on",
+        "recent": "Recent masks",
+        "recent_empty": "(no events yet)",
+        "restore_now": "Restore clipboard now",
+        "nothing_restore": "No placeholders on clipboard",
     },
     "zh": {
         "guard_on": "守卫：开启",
@@ -52,6 +58,12 @@ STRINGS = {
         "learned": "已学习 AI 客户端：{proc}",
         "autostart_on": "开机自启：开",
         "autostart_off": "开机自启：关",
+        "mode_focus": "模式：焦点感知",
+        "mode_always": "模式：全局常开",
+        "recent": "最近脱敏",
+        "recent_empty": "（暂无事件）",
+        "restore_now": "立即还原剪贴板",
+        "nothing_restore": "剪贴板无占位符",
     },
 }
 

@@ -16,8 +16,8 @@ public_url: "https://github.com/foo"
 '''
 
 
-def kinds(text):
-    return [m.kind for m in find_matches(text, ALL, [])]
+def kinds(text, **over):
+    return [m.kind for m in find_matches(text, dict(ALL, **over), [])]
 
 
 def test_secret_values_masked_keys_kept():
@@ -56,3 +56,12 @@ def test_configured_bare_domain():
     cfg = dict(ALL, internal_domains=["zetyun.cn"])
     ms = find_matches("k8s_zone: k8s.zetyun.cn\npub: github.com", cfg, [])
     assert [m.text for m in ms] == ["k8s.zetyun.cn"]
+
+def test_bankcard_bin_gate():
+    from pilayer.engine.rules import _luhn_valid
+    base = "999999999999999"
+    check = next(d for d in range(10) if _luhn_valid(base + str(d)))
+    order_like = base + str(check)
+    assert kinds(order_like) == []  # Luhn 通过但 BIN 未知 => 不掩
+    assert kinds(order_like, bankcard_bin=False) == ["BANKCARD"]
+    assert kinds("4111111111111111") == ["BANKCARD"]

@@ -34,6 +34,7 @@ def main(argv=None):
     p.add_argument("--dst", help="output path (default <name>.restored.<ext>)")
     sub.add_parser("stats", help="show local mapping statistics")
     sub.add_parser("purge", help="delete expired mappings (store.ttl_days)")
+    sub.add_parser("unmask", help="restore placeholders currently on the clipboard")
     sub.add_parser("install-sendto", help='install right-click "Send to -> Masked copy"')
     args = parser.parse_args(argv)
     cmd = args.cmd or "run"
@@ -80,6 +81,23 @@ def main(argv=None):
         ttl = load_config().get("store", {}).get("ttl_days", 30)
         n = masker.store.purge_expired(ttl)
         print(f"purged {n} expired mapping(s) (ttl={ttl}d)")
+    elif cmd == "unmask":
+        import win32clipboard
+        import win32con
+        win32clipboard.OpenClipboard()
+        try:
+            text = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+        except Exception:
+            text = ""
+        finally:
+            win32clipboard.CloseClipboard()
+        r = masker.restore(text or "")
+        if r.count:
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, r.text)
+            win32clipboard.CloseClipboard()
+        print(f"restored {r.count} placeholder(s) on clipboard")
     return 0
 
 

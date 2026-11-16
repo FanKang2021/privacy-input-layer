@@ -49,6 +49,18 @@ PRIORITY = {"PRIVKEY": 0, "URL": 1, "SECRET": 2, "TOKEN": 3, "IDCARD": 4,
 _ID_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
 _ID_CHECK = "10X98765432"
 
+# 银行卡 BIN 门控：Luhn 之外再要求已知 BIN，降订单号误报
+_BIN_PREFIXES = ("4", "51", "52", "53", "54", "55", "34", "37", "6011", "65",
+                 "644", "645", "646", "647", "648", "649", "3528", "3589", "36", "38", "39")
+_BIN_RANGES = ((622126, 622925), (621000, 621999), (620000, 620999))
+
+
+def _bin_known(s: str) -> bool:
+    if s.startswith(_BIN_PREFIXES):
+        return True
+    p6 = int(s[:6])
+    return any(a <= p6 <= b for a, b in _BIN_RANGES)
+
 
 @dataclass(frozen=True)
 class Match:
@@ -154,8 +166,9 @@ def find_matches(text: str, enabled: dict, keywords: list[str]) -> list[Match]:
             if _idcard_valid(m.group()):
                 matches.append(Match("IDCARD", m.start(), m.end(), m.group()))
     if enabled.get("bankcard", True):
+        bin_gate = enabled.get("bankcard_bin", True)
         for m in BANKCARD_RE.finditer(text):
-            if _luhn_valid(m.group()):
+            if _luhn_valid(m.group()) and (not bin_gate or _bin_known(m.group())):
                 matches.append(Match("BANKCARD", m.start(), m.end(), m.group()))
     if enabled.get("phone", True):
         for m in PHONE_RE.finditer(text):

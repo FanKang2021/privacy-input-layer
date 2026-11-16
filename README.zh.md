@@ -8,7 +8,9 @@
 
 全部本地运行：规则引擎 + 本地 OCR + 本地 sqlite 映射，原文永远不离开你的机器。
 
-[English](README.md)
+![示意演示](docs/demo.gif)
+
+[English](README.md) · [发布工具包](docs/launch.md) · [安全政策](SECURITY.md) · [更新日志](CHANGELOG.md)
 
 ## 为什么需要它
 

@@ -81,3 +81,12 @@ def test_injection_off_uses_legacy_compensation(tmp_path, monkeypatch):
     assert w.handle_paste() is False
     assert "[PHONE_" in state["text"]
     assert sent == []
+
+def test_audit_events_contain_no_secrets(tmp_path, monkeypatch):
+    w, state, sent = make_watcher(tmp_path, monkeypatch, ai=True)
+    state["text"] = "call 13800138000"
+    w.handle_paste()
+    w.drain_injection()
+    assert len(w.events) == 1
+    assert "masked 1" in w.events[0]
+    assert "13800138000" not in w.events[0]

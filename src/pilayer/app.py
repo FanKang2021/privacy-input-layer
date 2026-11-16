@@ -146,6 +146,37 @@ class Application:
         self._set_autostart(not self._autostart_enabled())
         icon.update_menu()
 
+    def _recent_menu(self):
+        entries = list(self.watcher.events)[:5]
+        if not entries:
+            return pystray.Menu(pystray.MenuItem(lambda item: t("recent_empty"), None, enabled=False))
+        return pystray.Menu(*[
+            pystray.MenuItem(lambda item, s=s: s, None, enabled=False) for s in entries
+        ])
+
+    def _restore_now(self, icon, item):
+        msg = self.watcher._restore_text_current()
+        self.notify("privacy-input-layer", msg or t("nothing_restore"))
+
+    def _toggle_mode(self, icon, item):
+        cur = self.cfg["guard"].get("mode", "focus")
+        new = "always" if cur == "focus" else "focus"
+        self.cfg["guard"]["mode"] = new
+        self.watcher.mode = new
+        if new == "focus":
+            if not self.focus:
+                from .focus import ForegroundWatcher
+                self.focus = ForegroundWatcher(self.cfg, self._on_focus)
+            self.focus.start()
+        else:
+            if self.focus:
+                self.focus.stop()
+                self.focus = None
+            self.watcher.ai_focused = False
+        self._save_config()
+        icon.update_menu()
+        self.notify("privacy-input-layer", t("mode_focus") if new == "focus" else t("mode_always"))
+
     def _save_config(self):
         import yaml
         (self.dir / "config.yaml").write_text(
@@ -157,6 +188,12 @@ class Application:
             pystray.MenuItem(self._status_text, self._toggle, default=True),
             pystray.MenuItem(self._notify_text, self._toggle_notify),
             pystray.MenuItem(lambda item: t("language"), self._toggle_language),
+            pystray.MenuItem(
+                lambda item: t("mode_focus") if self.cfg["guard"].get("mode", "focus") == "focus" else t("mode_always"),
+                self._toggle_mode,
+            ),
+            pystray.MenuItem(lambda item: t("recent"), self._recent_menu()),
+            pystray.MenuItem(lambda item: t("restore_now"), self._restore_now),
             pystray.MenuItem(
                 lambda item: t("autostart_on") if self._autostart_enabled() else t("autostart_off"),
                 self._toggle_autostart,

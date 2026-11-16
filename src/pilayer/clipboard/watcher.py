@@ -15,6 +15,7 @@ import re
 import struct
 import threading
 import time
+from collections import deque
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -86,6 +87,7 @@ class ClipboardWatcher:
         self.ai_focused = False
         self._hdrop_last: list[tuple[str, str]] | None = None
         self._pending_inject: str | None = None
+        self.events: deque = deque(maxlen=20)
         self._hwnd = None
         self._suppress_seq = None
         self._thread = None
@@ -306,11 +308,28 @@ class ClipboardWatcher:
         if not text:
             return False
         if self.mode == "focus":
-            target = self.masker.mask(text).text if self.ai_focused else self.masker.restore(text).text
+            if self.ai_focused:
+                r = self.masker.mask(text)
+                target = r.text
+                if r.count:
+                    kinds = "/".join(sorted(set(r.kinds)))
+                    self.events.appendleft(f"{time.strftime('%H:%M:%S')} masked {r.count} ({kinds})")
+            else:
+                r = self.masker.restore(text)
+                target = r.text
+                if r.count:
+                    self.events.appendleft(f"{time.strftime('%H:%M:%S')} restored {r.count}")
         elif self.cfg.get("auto_restore") and self.masker.has_placeholder(text):
-            target = self.masker.restore(text).text
+            r = self.masker.restore(text)
+            target = r.text
+            if r.count:
+                self.events.appendleft(f"{time.strftime('%H:%M:%S')} restored {r.count}")
         else:
-            target = self.masker.mask(text).text
+            r = self.masker.mask(text)
+            target = r.text
+            if r.count:
+                kinds = "/".join(sorted(set(r.kinds)))
+                self.events.appendleft(f"{time.strftime('%H:%M:%S')} masked {r.count} ({kinds})")
         if target == text:
             return False
         # 不在钩子回调内同步 SendInput（会被丢弃），标记后由泵循环延迟注入
@@ -323,6 +342,8 @@ class ClipboardWatcher:
             return
         self._pending_inject = None
         from .paste_hook import send_unicode
+        # 让被吞的原始按键完全落定，避免首字符被输入队列合并丢弃
+        time.sleep(0.05)
         ok = send_unicode(target)
         log.info("paste inject drain ok=%s len=%d", ok, len(target))
         if not ok:
@@ -360,6 +381,7 @@ class ClipboardWatcher:
         if r.count:
             self._write_text(r.text, fast=fast)
             kinds = "/".join(sorted(set(r.kinds)))
+            self.events.appendleft(f"{time.strftime('%H:%M:%S')} masked {r.count} ({kinds})")
             return t("masked", count=r.count, kinds=kinds)
         return None
 
@@ -370,6 +392,7 @@ class ClipboardWatcher:
         r = self.masker.restore(text)
         if r.count:
             self._write_text(r.text, fast=fast)
+            self.events.appendleft(f"{time.strftime('%H:%M:%S')} restored {r.count}")
             msg = t("restored", count=r.count)
             if r.missing:
                 msg += t("restored_missing", n=len(r.missing))
@@ -407,6 +430,7 @@ class ClipboardWatcher:
             return None
         if count:
             self._write_dib(image_to_dib(masked))
+            self.events.appendleft(f"{time.strftime('%H:%M:%S')} image masked {count}")
             return t("image_masked", count=count)
         return None
 
@@ -432,6 +456,7 @@ class ClipboardWatcher:
         if pairs:
             self._hdrop_last = pairs
             self._write_hdrop(new_paths)
+            self.events.appendleft(f"{time.strftime('%H:%M:%S')} files masked {len(pairs)}")
             return t("hdrop", n=len(pairs), dir=self.copies_dir)
         return None
 

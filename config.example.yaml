@@ -37,6 +37,7 @@ rules:
   phone: true               # mainland China mobile numbers
   idcard: true              # 18-digit ID card (checksum validated)
   bankcard: true            # 16-19 digit bank card (Luhn validated)
+  bankcard_bin: true        # additionally require a known BIN prefix/range (cuts order-number false positives)
   email: true               # email addresses
   privkey: true             # PEM private key blocks (OPENSSH/RSA/EC ...)
   ip: true                  # IPv4 addresses

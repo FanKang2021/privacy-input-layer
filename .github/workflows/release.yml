@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e .[image] pyinstaller
+      - name: Build exe
+        run: >
+          pyinstaller --noconsole --onefile --name pilayer-guard --paths src
+          --collect-all rapidocr_onnxruntime --collect-all onnxruntime
+          --hidden-import uiautomation --hidden-import comtypes.gen
+          --hidden-import pystray --hidden-import docx --hidden-import openpyxl
+          --distpath dist --workpath build --specpath build src/pilayer/__main__.py
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/pilayer-guard.exe

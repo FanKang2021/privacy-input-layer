@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+- Trust UI: tray "Recent masks" audit submenu (no secrets), "Restore clipboard
+  now", runtime focus/always mode toggle; `pilayer unmask` CLI
+- Bank card BIN gate (known prefixes + UnionPay ranges) cuts order-number false
+  positives; `rules.bankcard_bin` switch
+- Windows single-file exe (`pilayer-guard.exe`, includes OCR) built by CI on tags
+- Schematic demo GIF in README; docs/launch.md (Show HN / 掘金 / V2EX / Reddit copy)
+- Injection delivery verified end-to-end at input-event level (deterministic
+  foreground probe); first-char settle delay in drain
+
+### Fixed
+- Audit events now recorded on the injection path (not only clipboard-write path)
+- x64 SendInput first-character loss mitigated (50 ms settle); tkinter probe
+  insertion quirk documented as probe artifact
+
+### Notes
+- Apps with sparse accessibility trees (tkinter, some Electron shells) are not
+  caught by UIA signatures; covered by curated list / self-learning / title rules
+- Roadmap unchanged: NER async layer, opt-in local LLM review, browser extension,
+  macOS/Linux, code signing / EDR allowlisting
+
 ## 0.2.0
 
 ### Added
