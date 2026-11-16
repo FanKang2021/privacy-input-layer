@@ -124,6 +124,8 @@ class PasteHook:
         已释放才发完整组合——避免 synthetic/physical down 嵌套致 latch 紊乱。"""
         phys_ctrl = bool(_user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
         phys_shift = bool(_user32.GetAsyncKeyState(VK_SHIFT) & 0x8000)
+        log.info("resend vk=0x%x ctrl=%s shift=%s phys_ctrl=%s phys_shift=%s",
+                 vk, ctrl, shift, phys_ctrl, phys_shift)
         ev = []
         if ctrl and not phys_ctrl:
             ev.append((VK_CONTROL, False))
@@ -169,6 +171,7 @@ class PasteHook:
                 if wparam in (win32con.WM_KEYUP, win32con.WM_SYSKEYUP):
                     if ks.vkCode in self._swallowed:
                         self._swallowed.discard(ks.vkCode)
+                        log.info("swallow orphan keyup vk=0x%x", ks.vkCode)
                         return 1  # 吞掉孤儿 keyup，防宿主修饰键 latch 紊乱
                     return _user32.CallNextHookEx(self._hook, ncode, wparam, lparam)
                 if wparam in (win32con.WM_KEYDOWN, win32con.WM_SYSKEYDOWN):
@@ -177,6 +180,7 @@ class PasteHook:
                     if (ks.vkCode == VK_V and ctrl) or (ks.vkCode == VK_INSERT and shift):
                         self._swallowed.add(ks.vkCode)
                         self._last_combo = (ks.vkCode, bool(ctrl), bool(shift))
+                        log.info("swallow paste vk=0x%x ctrl=%s shift=%s", ks.vkCode, bool(ctrl), bool(shift))
                         threading.Thread(
                             target=self._worker, args=(ks.vkCode, bool(ctrl), bool(shift)),
                             daemon=True,

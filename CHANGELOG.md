@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.8
+
+### Added
+- Forensic logging for paste hook: swallow/orphan-keyup/resend events with
+  physical modifier state, to diagnose residual host shortcut popups
+- Documented relief switch: guard.paste_hook=false disables paste interception
+  (masking still protected via copy/focus paths)
+
 ## 0.4.7
 
 ### Changed
