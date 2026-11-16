@@ -3,6 +3,15 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag to attach assets to"
+        required: true
+        default: "v0.3.0"
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -24,4 +33,5 @@ jobs:
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: dist/pilayer-guard.exe
