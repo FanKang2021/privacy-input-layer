@@ -26,11 +26,11 @@ WINEVENT_OUTOFCONTEXT = 0x0000
 if sys.platform == "win32":
     _user32 = ctypes.windll.user32
     _kernel32 = ctypes.windll.kernel32
+    WinEventProc = ctypes.WINFUNCTYPE(
+        None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p,
+        ctypes.c_long, ctypes.c_long, ctypes.c_uint32, ctypes.c_uint32,
+    )
 
-WinEventProc = ctypes.WINFUNCTYPE(
-    None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p,
-    ctypes.c_long, ctypes.c_long, ctypes.c_uint32, ctypes.c_uint32,
-)
 
 _URLISH_RE = re.compile(r"^[\w-]+(\.[\w-]+)+(/[^\s]*)?$")
 _ADDRESS_BAR_KEYS = ("address", "地址", "搜索或输入", "search or enter")

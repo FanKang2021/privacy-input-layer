@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("win32clipboard")
+
 from pilayer.clipboard.watcher import html_to_text
 
 

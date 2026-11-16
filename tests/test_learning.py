@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("win32clipboard")
+
 import win32clipboard
 import win32con
 
