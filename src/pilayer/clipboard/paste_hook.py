@@ -119,17 +119,21 @@ class PasteHook:
             self._resend(vk, ctrl, shift)
 
     def _resend(self, vk, ctrl, shift):
-        """未变换时补发原组合键；带 MAGIC 标记令钩子放行。"""
+        """补发粘贴键。物理修饰键仍按住时只发主键（借用物理修饰），
+        已释放才发完整组合——避免 synthetic/physical down 嵌套致 latch 紊乱。"""
+        phys_ctrl = bool(_user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+        phys_shift = bool(_user32.GetAsyncKeyState(VK_SHIFT) & 0x8000)
         ev = []
-        mods = [(VK_CONTROL, ctrl), (VK_SHIFT, shift)]
-        for m, on in mods:
-            if on:
-                ev.append((m, False))
+        if ctrl and not phys_ctrl:
+            ev.append((VK_CONTROL, False))
+        if shift and not phys_shift:
+            ev.append((VK_SHIFT, False))
         ev.append((vk, False))
         ev.append((vk, True))
-        for m, on in reversed(mods):
-            if on:
-                ev.append((m, True))
+        if shift and not phys_shift:
+            ev.append((VK_SHIFT, True))
+        if ctrl and not phys_ctrl:
+            ev.append((VK_CONTROL, True))
         inputs = []
         for code, up in ev:
             inp = INPUT(type=INPUT_KEYBOARD)

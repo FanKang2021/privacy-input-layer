@@ -109,3 +109,19 @@ def test_orphan_keyup_swallowed(monkeypatch):
     ks2 = ph.KBDLLHOOKSTRUCT(0x56, 0, 0, 0, None)
     assert hook._cb(0, WM_KEYUP, ctypes.byref(ks2)) == 1
     assert not hook._swallowed
+
+
+def test_resend_adapts_to_physical_modifiers(monkeypatch):
+    import ctypes
+    from pilayer.clipboard import paste_hook as ph
+    sent = []
+    monkeypatch.setattr(ph._user32, "SendInput", lambda n, arr, sz: sent.append([arr[i].union.ki.wVk for i in range(n)]) or n)
+    hook = ph.PasteHook(lambda: False)
+    # 物理 Ctrl 仍按住：只发 V
+    monkeypatch.setattr(ph._user32, "GetAsyncKeyState", lambda vk: 0x8000 if vk == 0x11 else 0)
+    hook._resend(0x56, True, False)
+    assert sent[-1] == [0x56, 0x56]
+    # 物理 Ctrl 已释放：完整组合
+    monkeypatch.setattr(ph._user32, "GetAsyncKeyState", lambda vk: 0)
+    hook._resend(0x56, True, False)
+    assert sent[-1] == [0x11, 0x56, 0x56, 0x11]

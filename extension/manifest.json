@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "privacy-input-layer",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Mask secrets in web AI chat inputs at paste time. Complements the OS-level guard.",
   "permissions": ["storage"],
   "content_scripts": [

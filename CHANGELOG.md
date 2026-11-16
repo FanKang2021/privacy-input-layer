@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.6
+
+### Fixed
+- Adaptive paste-key resend: when physical Ctrl/Shift still held, resend only
+  the main key (borrowing the physical modifier); full combo only when
+  released. Prevents synthetic/physical modifier-down nesting that latched
+  Ctrl in Electron hosts (post-paste shortcut popups)
+
 ## 0.4.5
 
 ### Fixed
