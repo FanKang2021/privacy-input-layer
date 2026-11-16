@@ -2,7 +2,7 @@ import win32clipboard
 import win32con
 
 from pilayer import focus
-from pilayer.clipboard import ClipboardWatcher
+from pilayer.clipboard.watcher import ClipboardWatcher
 from pilayer.engine import MappingStore, TextMasker
 from pilayer.engine.image import ImageMasker
 from pilayer.focus import classify_target

@@ -1,7 +1,11 @@
+import pytest
+
+pytest.importorskip("win32clipboard")
+
 import win32clipboard
 import win32con
 
-from pilayer.clipboard import ClipboardWatcher
+from pilayer.clipboard.watcher import ClipboardWatcher
 from pilayer.clipboard import paste_hook
 from pilayer.engine import MappingStore, TextMasker
 from pilayer.engine.image import ImageMasker

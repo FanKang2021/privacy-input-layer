@@ -11,17 +11,21 @@ import threading
 import time
 from urllib.parse import urlparse
 
-import pythoncom
-import win32gui
-import win32process
+import sys
+
+if sys.platform == "win32":
+    import pythoncom
+    import win32gui
+    import win32process
 
 log = logging.getLogger("pilayer.focus")
 
 EVENT_SYSTEM_FOREGROUND = 0x0003
 WINEVENT_OUTOFCONTEXT = 0x0000
 
-_user32 = ctypes.windll.user32
-_kernel32 = ctypes.windll.kernel32
+if sys.platform == "win32":
+    _user32 = ctypes.windll.user32
+    _kernel32 = ctypes.windll.kernel32
 
 WinEventProc = ctypes.WINFUNCTYPE(
     None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p,

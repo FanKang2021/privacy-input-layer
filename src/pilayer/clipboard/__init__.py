@@ -1,3 +1,1 @@
-from .watcher import ClipboardWatcher
-
-__all__ = ["ClipboardWatcher"]
+"""Clipboard backends (Windows reference; see backends/ for mac/Linux)."""

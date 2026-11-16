@@ -9,7 +9,7 @@ from pathlib import Path
 import pystray
 from PIL import Image, ImageDraw
 
-from .clipboard import ClipboardWatcher
+from .clipboard.watcher import ClipboardWatcher
 from .config import app_dir, load_config
 from .engine import MappingStore, TextMasker
 from .engine.image import ImageMasker

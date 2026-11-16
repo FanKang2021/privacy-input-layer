@@ -8,6 +8,7 @@ import ctypes
 import hashlib
 import re
 import sqlite3
+import sys
 import threading
 import time
 from pathlib import Path
@@ -19,21 +20,26 @@ class _DATA_BLOB(ctypes.Structure):
     _fields_ = [("cbData", ctypes.c_uint32), ("pbData", ctypes.POINTER(ctypes.c_char))]
 
 
-_crypt32 = ctypes.windll.crypt32
-_kernel32 = ctypes.windll.kernel32
+if sys.platform == "win32":
+    _crypt32 = ctypes.windll.crypt32
+    _kernel32 = ctypes.windll.kernel32
 
+    def _dpapi(data: bytes, encrypt: bool) -> bytes:
+        buf = ctypes.create_string_buffer(data, len(data))
+        blob_in = _DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+        blob_out = _DATA_BLOB()
+        fn = _crypt32.CryptProtectData if encrypt else _crypt32.CryptUnprotectData
+        if not fn(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+            raise OSError(f"DPAPI error {ctypes.GetLastError()}")
+        try:
+            return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+        finally:
+            _kernel32.LocalFree(blob_out.pbData)
+else:
+    from cryptography.fernet import Fernet
 
-def _dpapi(data: bytes, encrypt: bool) -> bytes:
-    buf = ctypes.create_string_buffer(data, len(data))
-    blob_in = _DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
-    blob_out = _DATA_BLOB()
-    fn = _crypt32.CryptProtectData if encrypt else _crypt32.CryptUnprotectData
-    if not fn(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
-        raise OSError(f"DPAPI error {ctypes.GetLastError()}")
-    try:
-        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
-    finally:
-        _kernel32.LocalFree(blob_out.pbData)
+    def _dpapi(data: bytes, encrypt: bool) -> bytes:
+        raise RuntimeError("platform cipher must be initialized per-store")
 
 
 def _hash(original: str) -> str:
@@ -44,6 +50,18 @@ class MappingStore:
     def __init__(self, path: str | Path):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        if sys.platform == "win32":
+            self._crypt = _dpapi
+        else:
+            keyfile = Path(str(path) + ".key")
+            if keyfile.exists():
+                key = keyfile.read_bytes()
+            else:
+                key = Fernet.generate_key()
+                keyfile.write_bytes(key)
+                keyfile.chmod(0o600)
+            f = Fernet(key)
+            self._crypt = lambda data, encrypt: f.encrypt(data) if encrypt else f.decrypt(data)
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.executescript(
             """
@@ -71,10 +89,10 @@ class MappingStore:
         for ph, kind, original in self._db.execute(
             "SELECT placeholder, kind, original FROM mappings WHERE original_hash IS NULL"
         ).fetchall():
-            plain = original if isinstance(original, str) else _dpapi(original, False).decode("utf-8")
+            plain = original if isinstance(original, str) else self._crypt(original, False).decode("utf-8")
             self._db.execute(
                 "UPDATE mappings SET original=?, original_hash=? WHERE placeholder=?",
-                (_dpapi(plain.encode("utf-8"), True), _hash(plain), ph),
+                (self._crypt(plain.encode("utf-8"), True), _hash(plain), ph),
             )
 
     def get_or_create(self, kind: str, original: str) -> str:
@@ -98,7 +116,7 @@ class MappingStore:
             self._db.execute(
                 "INSERT INTO mappings(placeholder, kind, original, original_hash, created_at, last_used) "
                 "VALUES (?,?,?,?,?,?)",
-                (placeholder, kind, _dpapi(original.encode("utf-8"), True), h, now, now),
+                (placeholder, kind, self._crypt(original.encode("utf-8"), True), h, now, now),
             )
             self._db.commit()
             return placeholder
@@ -121,7 +139,7 @@ class MappingStore:
             ).fetchone()
         if row is None:
             return None
-        return _dpapi(row[0], False).decode("utf-8")
+        return self._crypt(row[0], False).decode("utf-8")
 
     def restore(self, text: str) -> tuple[str, int, list[str]]:
         """返回 (还原后文本, 成功还原数, 未找到映射的占位符)。"""

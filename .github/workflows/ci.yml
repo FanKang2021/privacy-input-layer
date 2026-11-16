@@ -37,4 +37,4 @@ jobs:
         with:
           node-version: "20"
       - name: Extension rule tests
-        run: node --test "extension/test/*.test.js"
+        run: node --test extension/test/rules.test.js
