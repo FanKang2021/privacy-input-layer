@@ -3,9 +3,10 @@
 ## 0.4.1
 
 ### Added
-- Release binaries for all platforms: pilayer-guard.exe (Windows),
-  pilayer-guard-macos-arm64 / -macos-x64, pilayer-guard-linux-x86_64
-  (ubuntu-22.04 build for wider glibc compatibility)
+- Release binaries: pilayer-guard.exe (Windows), pilayer-guard-macos-arm64,
+  pilayer-guard-linux-x86_64 (ubuntu-22.04 build for wider glibc compatibility).
+  Intel macOS: no prebuilt (Intel runners retired; PyInstaller cannot
+  cross-compile) — use `pip install -e .[image]` there.
 - macOS Gatekeeper / Linux exec-permission notes in README/SECURITY
 
 ### Notes

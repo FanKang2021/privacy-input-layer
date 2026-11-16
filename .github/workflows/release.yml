@@ -23,8 +23,6 @@ jobs:
             suffix: ""
           - os: macos-latest
             suffix: "-macos-arm64"
-          - os: macos-13
-            suffix: "-macos-x64"
           - os: ubuntu-22.04
             suffix: "-linux-x86_64"
     runs-on: ${{ matrix.os }}

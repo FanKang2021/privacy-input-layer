@@ -58,9 +58,10 @@ Linux clipboard I/O delegates to `xclip`/`xsel` and injection to `xdotool`
 (install via your package manager); without them the guard degrades gracefully.
 
 Release binaries: `pilayer-guard.exe` (Windows), `pilayer-guard-macos-arm64`,
-`pilayer-guard-macos-x64`, `pilayer-guard-linux-x86_64`. macOS binaries are
-unsigned: right-click → Open once (or `xattr -d com.apple.quarantine <file>`);
-Linux: `chmod +x` first. Prefer `pip install -e .` for development.
+`pilayer-guard-linux-x86_64`. Intel macOS has no prebuilt (Intel CI runners
+retired; PyInstaller cannot cross-compile) — use `pip install -e .[image]`.
+macOS binaries are unsigned: right-click → Open once (or
+`xattr -d com.apple.quarantine <file>`); Linux: `chmod +x` first.
 
 macOS/Linux backends share the same engine (rules, DPAPI-equivalent local mapping,
 i18n) as the Windows reference implementation; CI verifies them on
