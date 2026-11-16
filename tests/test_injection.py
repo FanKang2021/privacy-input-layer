@@ -92,3 +92,20 @@ def test_audit_events_contain_no_secrets(tmp_path, monkeypatch):
     assert len(w.events) == 1
     assert "masked 1" in w.events[0]
     assert "13800138000" not in w.events[0]
+
+
+def test_orphan_keyup_swallowed(monkeypatch):
+    import ctypes
+    import time as _t
+    from win32con import WM_KEYDOWN, WM_KEYUP
+    from pilayer.clipboard import paste_hook as ph
+    monkeypatch.setattr(ph._user32, "GetAsyncKeyState", lambda vk: 0x8000 if vk == 0x11 else 0)
+    monkeypatch.setattr(ph.PasteHook, "_resend", lambda self, *a: None)
+    hook = ph.PasteHook(lambda: False)
+    ks = ph.KBDLLHOOKSTRUCT(0x56, 0, 0, 0, None)
+    assert hook._cb(0, WM_KEYDOWN, ctypes.byref(ks)) == 1
+    assert 0x56 in hook._swallowed
+    _t.sleep(0.2)
+    ks2 = ph.KBDLLHOOKSTRUCT(0x56, 0, 0, 0, None)
+    assert hook._cb(0, WM_KEYUP, ctypes.byref(ks2)) == 1
+    assert not hook._swallowed

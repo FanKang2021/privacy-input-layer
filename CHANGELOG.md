@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.4
+
+### Fixed
+- Orphan paste-key KEYUP now swallowed together with the swallowed KEYDOWN:
+  hosts (Electron apps) no longer see unbalanced modifier sequences that
+  latched Ctrl and turned later keystrokes into shortcuts (search/settings
+  popups after paste)
+- Restore-direction injection waits for physical modifier release (<=3s);
+  synthetic keyup removed (defeated by Ctrl auto-repeat keydown). If Ctrl is
+  still held at deadline, falls back to clipboard path (rare, documented
+  privacy trade-off)
+
+### Notes
+- Web chat sidebars on ordinary pages are not classifiable via UIA
+  (contenteditable placeholders invisible); the MV3 extension is the designed
+  layer for web chats (DOM paste masking, classification-free)
+- Large one-shot paste stutter is host-app rendering, not guard behavior
+
 ## 0.4.3
 
 ### Changed

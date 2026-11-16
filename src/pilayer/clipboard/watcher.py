@@ -349,8 +349,18 @@ class ClipboardWatcher:
             return
         self._pending_inject = None
         from . import paste_hook
-        # 合成释放修饰键：无论用户是否仍按住 Ctrl/Shift，注入字符都不带修饰
-        paste_hook.release_modifiers()
+        # 等物理修饰键真正释放（合成 keyup 会被 Ctrl 自动重复 keydown 覆盖）
+        deadline = time.time() + 3.0
+        while time.time() < deadline and (
+            paste_hook._user32.GetAsyncKeyState(0x11) & 0x8000
+            or paste_hook._user32.GetAsyncKeyState(0x10) & 0x8000
+            or paste_hook._user32.GetAsyncKeyState(0x12) & 0x8000
+        ):
+            time.sleep(0.01)
+        if paste_hook._user32.GetAsyncKeyState(0x11) & 0x8000:
+            # 用户仍按住 Ctrl：回退剪贴板路径（罕见，隐私 trade-off 已文档化）
+            self._write_text(target)
+            return
         ok = paste_hook.send_unicode(target)
         log.info("paste inject drain ok=%s len=%d", ok, len(target))
         if not ok:

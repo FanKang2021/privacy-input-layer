@@ -49,17 +49,6 @@ _user32.SendInput.argtypes = [ctypes.c_uint, ctypes.POINTER(INPUT), ctypes.c_int
 _user32.SendInput.restype = ctypes.c_uint
 
 
-def release_modifiers():
-    """合成 Ctrl/Shift/Alt keyup，保证后续注入字符不带修饰（防快捷键污染）。"""
-    inputs = []
-    for code in (VK_CONTROL, VK_SHIFT, 0x12):
-        inp = INPUT(type=INPUT_KEYBOARD)
-        inp.union.ki = KEYBDINPUT(code, 0, KEYEVENTF_KEYUP, 0, PasteHook.MAGIC)
-        inputs.append(inp)
-    arr = (INPUT * len(inputs))(*inputs)
-    _user32.SendInput(len(inputs), arr, ctypes.sizeof(INPUT))
-
-
 def send_unicode(text: str) -> bool:
     """以 UTF-16 code unit 逐字符注入（含代理对），不经过剪贴板。"""
     units = text.encode("utf-16-le")
@@ -110,6 +99,7 @@ class PasteHook:
         self._hook = None
         self._proc = None
         self._thread = None
+        self._swallowed = set()
 
     def start(self):
         self._thread = threading.Thread(target=self._run, name="pilayer-paste", daemon=True)
@@ -167,18 +157,25 @@ class PasteHook:
 
     def _cb(self, ncode, wparam, lparam):
         try:
-            if ncode >= 0 and wparam in (win32con.WM_KEYDOWN, win32con.WM_SYSKEYDOWN):
+            if ncode >= 0:
                 ks = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
                 if ks.dwExtraInfo == self.MAGIC:
                     return _user32.CallNextHookEx(self._hook, ncode, wparam, lparam)
-                ctrl = _user32.GetAsyncKeyState(VK_CONTROL) & 0x8000
-                shift = _user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
-                if (ks.vkCode == VK_V and ctrl) or (ks.vkCode == VK_INSERT and shift):
-                    threading.Thread(
-                        target=self._worker, args=(ks.vkCode, bool(ctrl), bool(shift)),
-                        daemon=True,
-                    ).start()
-                    return 1  # 吞键，worker 决定注入或补发
+                if wparam in (win32con.WM_KEYUP, win32con.WM_SYSKEYUP):
+                    if ks.vkCode in self._swallowed:
+                        self._swallowed.discard(ks.vkCode)
+                        return 1  # 吞掉孤儿 keyup，防宿主修饰键 latch 紊乱
+                    return _user32.CallNextHookEx(self._hook, ncode, wparam, lparam)
+                if wparam in (win32con.WM_KEYDOWN, win32con.WM_SYSKEYDOWN):
+                    ctrl = _user32.GetAsyncKeyState(VK_CONTROL) & 0x8000
+                    shift = _user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
+                    if (ks.vkCode == VK_V and ctrl) or (ks.vkCode == VK_INSERT and shift):
+                        self._swallowed.add(ks.vkCode)
+                        threading.Thread(
+                            target=self._worker, args=(ks.vkCode, bool(ctrl), bool(shift)),
+                            daemon=True,
+                        ).start()
+                        return 1  # 吞键，worker 决定注入或补发
         except Exception as e:
             log.warning("paste hook error: %s", e)
         return _user32.CallNextHookEx(self._hook, ncode, wparam, lparam)
