@@ -10,19 +10,41 @@ IDCARD_RE = re.compile(
 BANKCARD_RE = re.compile(r"(?<!\d)\d{16,19}(?!\d)")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PRIVKEY_RE = re.compile(
-    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----.*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----",
     re.S,
 )
 IPV4_RE = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+IPV6_RE = re.compile(
+    r"(?<![\w:.])(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}(?![\w:.])"
+    r"|(?<![\w:.])::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6})?(?![\w:.])"
+)
 TOKEN_RE = re.compile(
-    r"\b(?:sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}"
+    r"\b(?:sk-[A-Za-z0-9_-]{20,}|(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}"
+    r"|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}"
     r"|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|AIza[0-9A-Za-z_-]{35}|SG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"
+    r"|key-[0-9a-zA-Z]{32}|AccountKey=[A-Za-z0-9+/=]{40,}"
     r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"
 )
+# URI userinfo 内嵌密码：scheme://user:pass@host，与主机是否内网无关；密码可含空格/#
+USERINFO_RE = re.compile(r"\b[a-z][a-z0-9+.-]*://[^/\s:@]+:([^/@]+)@")
+# 不透明 Bearer/Basic 认证头：只掩令牌段
+AUTH_HEADER_RE = re.compile(r"(?i)\b(?:bearer|basic)\s+([A-Za-z0-9+/=._-]{16,})")
+ENTROPY_RE = re.compile(r"\b[A-Za-z0-9+/=_-]{24,}\b")
+# 赋值型密钥：键名含敏感词，掩值保留键名；Jinja 引用值跳过
+SECRET_KEY_RE = re.compile(
+    r"(?i)\b[\w.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key)[\w.-]*\s*[:=]\s*"
+)
+URL_RE = re.compile(r"[a-z][a-z0-9+.-]*://(?:\{\{[^}]*\}\}|[^\s\"'<>])+")
+# 模板化裸域名：{{ region }}.corp.example.cn 这类内网基础设施引用
+TEMPLATED_DOMAIN_RE = re.compile(r"\{\{[^}]*\}\}(?:\.[A-Za-z0-9-]+)+")
+_PRIVATE_IP_RE = re.compile(
+    r"^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|127\.)"
+)
 
-# 占位符优先级：重叠时私钥 > 令牌 > 身份证 > 银行卡 > 手机号 > 邮箱 > IP > 关键词
-PRIORITY = {"PRIVKEY": 0, "TOKEN": 1, "IDCARD": 2, "BANKCARD": 3,
-            "PHONE": 4, "EMAIL": 5, "IP": 6, "KEYWORD": 7}
+# 占位符优先级：重叠时私钥 > 内网URL > 赋值密钥/URI密码 > 令牌 > 身份证 > 银行卡 > 手机号 > 邮箱 > IP > 熵 > 关键词
+PRIORITY = {"PRIVKEY": 0, "URL": 1, "SECRET": 2, "TOKEN": 3, "IDCARD": 4,
+            "BANKCARD": 5, "PHONE": 6, "EMAIL": 7, "IP": 8, "ENTROPY": 9, "KEYWORD": 10}
 
 _ID_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
 _ID_CHECK = "10X98765432"
@@ -53,11 +75,77 @@ def _ipv4_valid(s: str) -> bool:
     return all(0 <= int(o) <= 255 for o in s.split("."))
 
 
+def _secret_value_span(text: str, pos: int) -> tuple[int, int] | None:
+    """pos 指向赋值符后的值起点；返回值的 (start, end)，跳过空值与 Jinja 引用。"""
+    n = len(text)
+    while pos < n and text[pos] in " \t":
+        pos += 1
+    if pos >= n:
+        return None
+    if text[pos] in "\"'":
+        quote = text[pos]
+        end = text.find(quote, pos + 1)
+        if end == -1 or end == pos + 1:
+            return None
+        if text.startswith("{{", pos + 1):
+            return None
+        return pos + 1, end
+    if text.startswith("{{", pos):
+        return None
+    # YAML 裸标量语义到行尾：含 #/空格/逗号的密码不得截断残留
+    end = text.find("\n", pos)
+    if end == -1:
+        end = n
+    while end > pos and text[end - 1] in " \t\r":
+        end -= 1
+    if end == pos:
+        return None
+    return pos, end
+
+
+def _internal_url(url: str, internal_domains: list[str]) -> bool:
+    authority = url.split("://", 1)[1].split("/", 1)[0]
+    if "@" in authority:
+        authority = authority.rsplit("@", 1)[1]
+    host = authority.split(":", 1)[0]
+    if "{{" in host:
+        return True
+    if _PRIVATE_IP_RE.match(host):
+        return True
+    return any(host == d or host.endswith("." + d) for d in internal_domains)
+
+
+def _shannon(s: str) -> float:
+    from collections import Counter
+    from math import log2
+    n = len(s)
+    return -sum((c / n) * log2(c / n) for c in Counter(s).values())
+
+
 def find_matches(text: str, enabled: dict, keywords: list[str]) -> list[Match]:
     matches: list[Match] = []
     if enabled.get("privkey", True):
         for m in PRIVKEY_RE.finditer(text):
             matches.append(Match("PRIVKEY", m.start(), m.end(), m.group()))
+    if enabled.get("secret", True):
+        for m in SECRET_KEY_RE.finditer(text):
+            span = _secret_value_span(text, m.end())
+            if span:
+                matches.append(Match("SECRET", span[0], span[1], text[span[0]:span[1]]))
+        for m in USERINFO_RE.finditer(text):
+            matches.append(Match("SECRET", m.start(1), m.end(1), m.group(1)))
+        for m in AUTH_HEADER_RE.finditer(text):
+            matches.append(Match("SECRET", m.start(1), m.end(1), m.group(1)))
+    if enabled.get("url", True):
+        domains = [d.lower() for d in enabled.get("internal_domains", [])]
+        for m in URL_RE.finditer(text):
+            if _internal_url(m.group(), domains):
+                matches.append(Match("URL", m.start(), m.end(), m.group()))
+        for m in TEMPLATED_DOMAIN_RE.finditer(text):
+            matches.append(Match("URL", m.start(), m.end(), m.group()))
+        for d in domains:
+            for m in re.finditer(r"(?<![\w.-])(?:[\w-]+\.)*" + re.escape(d) + r"(?![\w-])", text, re.I):
+                matches.append(Match("URL", m.start(), m.end(), m.group()))
     if enabled.get("token", True):
         for m in TOKEN_RE.finditer(text):
             matches.append(Match("TOKEN", m.start(), m.end(), m.group()))
@@ -79,6 +167,12 @@ def find_matches(text: str, enabled: dict, keywords: list[str]) -> list[Match]:
         for m in IPV4_RE.finditer(text):
             if _ipv4_valid(m.group()):
                 matches.append(Match("IP", m.start(), m.end(), m.group()))
+        for m in IPV6_RE.finditer(text):
+            matches.append(Match("IP", m.start(), m.end(), m.group()))
+    if enabled.get("entropy", False):
+        for m in ENTROPY_RE.finditer(text):
+            if _shannon(m.group()) >= 4.5:
+                matches.append(Match("ENTROPY", m.start(), m.end(), m.group()))
     for kw in keywords:
         if not kw:
             continue

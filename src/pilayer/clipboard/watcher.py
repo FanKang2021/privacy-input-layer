@@ -1,13 +1,20 @@
 """Windows 剪贴板守卫：事件监听 + 文本脱敏/还原 + 图片打码 + 文件副本替换。
 
+两种模式：
+- focus：仅 AI 客户端前台时脱敏；离开 AI 时还原。切窗瞬间变换当前剪贴板。
+- always：全局常开（复制即脱敏、复制占位符即还原）。
+
 防自触发：写入剪贴板后记录序列号，下一次 WM_CLIPBOARDUPDATE 若序列号
 相同则跳过，避免"脱敏->触发->再脱敏"循环。
 """
 
 import ctypes
+import html as _html
+import re
 import struct
 import threading
 import time
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pythoncom
@@ -16,12 +23,39 @@ import win32clipboard
 import win32con
 import win32gui
 
+from ..i18n import t
 from ..engine import TextMasker
 from ..engine.image import ImageMasker, ImageOCRUnavailable
 from ..files import SUPPORTED_EXTS, mask_file
 from .dib import dib_to_image, image_to_dib
 
 WM_CLIPBOARDUPDATE = 0x031D
+
+
+class _TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def html_to_text(raw) -> str | None:
+    """CF_HTML-only 复制源的回退提取：取 StartFragment 片段去标签。"""
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    if not isinstance(raw, str):
+        return None
+    m = re.search(r"<!--StartFragment-->(.*?)<!--EndFragment-->", raw, re.S)
+    frag = m.group(1) if m else raw
+    p = _TextExtractor()
+    try:
+        p.feed(frag)
+    except Exception:
+        return None
+    text = _html.unescape("".join(p.parts))
+    return text or None
 
 # pywin32 未封装这两个 API，直接调 user32
 _user32 = ctypes.windll.user32
@@ -42,6 +76,9 @@ class ClipboardWatcher:
         self.file_suffix = file_suffix
         self.notify = notify or (lambda title, msg: None)
         self.enabled = True
+        self.mode = guard_cfg.get("mode", "focus")
+        self.ai_focused = False
+        self._hdrop_last: list[tuple[str, str]] | None = None
         self._hwnd = None
         self._suppress_seq = None
         self._thread = None
@@ -86,9 +123,11 @@ class ClipboardWatcher:
             try:
                 seq = win32clipboard.GetClipboardSequenceNumber()
                 if seq != self._suppress_seq:
-                    self._on_update()
+                    result = self._on_update()
+                    if result:
+                        self.notify("privacy-input-layer", result)
             except Exception as e:
-                self.notify("privacy-input-layer", f"处理剪贴板出错：{e}")
+                self.notify("privacy-input-layer", t("clip_error", e=e))
             return 0
         if msg == win32con.WM_DESTROY:
             try:
@@ -99,22 +138,48 @@ class ClipboardWatcher:
             return 0
         return win32gui.DefWindowProc(hwnd, msg, wparam, lparam)
 
+    # ---------- 焦点感知 ----------
+
+    def set_focus(self, ai: bool) -> str | None:
+        if self.mode != "focus" or ai == self.ai_focused:
+            return None
+        self.ai_focused = ai
+        if ai:
+            return self._apply_focus()
+        # 懒还原：离开 AI 不主动把明文写回共享剪贴板，
+        # 由粘贴钩子/复制事件按需还原（lazy_restore=false 恢复旧行为）
+        if not self.cfg.get("lazy_restore", True):
+            return self._apply_focus()
+        return None
+
+    def _apply_focus(self) -> str | None:
+        if not self.enabled:
+            return None
+        if self.cfg.get("hdrop_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
+            return self._handle_hdrop() if self.ai_focused else self._restore_hdrop()
+        if self.cfg.get("image_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_DIB):
+            return self._handle_image() if self.ai_focused else None
+        if self.cfg.get("text_enabled") and self._text_available():
+            return self._mask_text_current() if self.ai_focused else self._restore_text_current()
+        return None
+
     # ---------- 剪贴板读写 ----------
 
-    def _open(self, retries: int = 20) -> bool:
+    def _open(self, retries: int = 20, delay: float = 0.03) -> bool:
         for _ in range(retries):
             try:
                 win32clipboard.OpenClipboard()
                 return True
             except Exception:
-                time.sleep(0.03)
+                time.sleep(delay)
         return False
 
     def _mark_self_write(self):
         self._suppress_seq = win32clipboard.GetClipboardSequenceNumber()
 
-    def _write_text(self, text: str):
-        if not self._open():
+    def _write_text(self, text: str, fast: bool = False):
+        opened = self._open(3, 0.01) if fast else self._open()
+        if not opened:
             return
         try:
             win32clipboard.EmptyClipboard()
@@ -145,98 +210,171 @@ class ClipboardWatcher:
             win32clipboard.CloseClipboard()
         self._mark_self_write()
 
-    # ---------- 事件分发 ----------
+    def _text_available(self) -> bool:
+        return (
+            win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT)
+            or win32clipboard.IsClipboardFormatAvailable(win32con.CF_HTML)
+        )
 
-    def _on_update(self):
-        if not self.enabled:
-            return
-        if self.cfg.get("hdrop_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
-            self._handle_hdrop()
-        elif self.cfg.get("image_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_DIB):
-            self._handle_image()
-        elif self.cfg.get("text_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
-            self._handle_text()
-
-    def _handle_text(self):
-        if not self._open():
-            return
+    def _read_text(self, fast: bool = False) -> str | None:
+        opened = self._open(3, 0.01) if fast else self._open()
+        if not opened:
+            return None
         try:
-            text = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+            if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
+                text = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+                return text if isinstance(text, str) else None
+            if win32clipboard.IsClipboardFormatAvailable(win32con.CF_HTML):
+                return html_to_text(win32clipboard.GetClipboardData(win32con.CF_HTML))
+            return None
         except Exception:
-            return
+            return None
         finally:
             win32clipboard.CloseClipboard()
-        if not isinstance(text, str) or not text.strip():
-            return
 
+    def _read_hdrop(self) -> tuple[str, ...] | None:
+        if not self._open():
+            return None
+        try:
+            return win32clipboard.GetClipboardData(win32con.CF_HDROP)
+        except Exception:
+            return None
+        finally:
+            win32clipboard.CloseClipboard()
+
+    # ---------- 变换逻辑（返回通知消息或 None） ----------
+
+    def _on_update(self) -> str | None:
+        if not self.enabled:
+            return None
+        if self.mode == "focus" and not self.ai_focused:
+            # 非 AI 前台：只还原，不脱敏
+            if self.cfg.get("hdrop_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
+                return self._restore_hdrop()
+            if self.cfg.get("text_enabled") and self._text_available():
+                return self._restore_text_current()
+            return None
+        if self.cfg.get("hdrop_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
+            return self._handle_hdrop()
+        if self.cfg.get("image_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_DIB):
+            return self._handle_image()
+        if self.cfg.get("text_enabled") and self._text_available():
+            return self._handle_text()
+        return None
+
+    def ensure_for_paste(self):
+        """粘贴键瞬间的毫秒级补偿：只处理文本，图片/文件走切窗路径。"""
+        if not self.enabled:
+            return
+        if win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
+            return
+        if win32clipboard.IsClipboardFormatAvailable(win32con.CF_DIB):
+            return
+        if not self._text_available():
+            return
+        if self.mode == "focus":
+            if self.ai_focused:
+                self._mask_text_current(fast=True)
+            else:
+                self._restore_text_current(fast=True)
+            return
+        text = self._read_text(fast=True)
+        if not text or not text.strip():
+            return
         if self.cfg.get("auto_restore") and self.masker.has_placeholder(text):
-            r = self.masker.restore(text)
-            if r.count:
-                self._write_text(r.text)
-                msg = f"已还原 {r.count} 处占位符"
-                if r.missing:
-                    msg += f"（{len(r.missing)} 处无映射，保留原样）"
-                self.notify("privacy-input-layer", msg)
-            return
+            self._restore_text_current(fast=True)
+        else:
+            self._mask_text_current(fast=True)
 
+    def _mask_text_current(self, fast: bool = False) -> str | None:
+        text = self._read_text(fast=fast)
+        if not text or not text.strip():
+            return None
         r = self.masker.mask(text)
         if r.count:
-            self._write_text(r.text)
+            self._write_text(r.text, fast=fast)
             kinds = "/".join(sorted(set(r.kinds)))
-            self.notify("privacy-input-layer", f"已脱敏 {r.count} 处（{kinds}），粘贴即安全")
+            return t("masked", count=r.count, kinds=kinds)
+        return None
 
-    def _handle_image(self):
+    def _restore_text_current(self, fast: bool = False) -> str | None:
+        text = self._read_text(fast=fast)
+        if not text or not self.masker.has_placeholder(text):
+            return None
+        r = self.masker.restore(text)
+        if r.count:
+            self._write_text(r.text, fast=fast)
+            msg = t("restored", count=r.count)
+            if r.missing:
+                msg += t("restored_missing", n=len(r.missing))
+            return msg
+        return None
+
+    def _handle_text(self) -> str | None:
+        if self.mode == "focus":
+            return self._mask_text_current() if self.ai_focused else self._restore_text_current()
+        text = self._read_text()
+        if not text or not text.strip():
+            return None
+        if self.cfg.get("auto_restore") and self.masker.has_placeholder(text):
+            return self._restore_text_current()
+        return self._mask_text_current()
+
+    def _handle_image(self) -> str | None:
         if not self._open():
-            return
+            return None
         try:
             dib = win32clipboard.GetClipboardData(win32con.CF_DIB)
         except Exception:
-            return
+            return None
         finally:
             win32clipboard.CloseClipboard()
         img = dib_to_image(dib)
         if img is None:
-            return
+            return None
         try:
             masked, count = self.image_masker.mask(img)
         except ImageOCRUnavailable as e:
             if not self._image_warned:
                 self._image_warned = True
-                self.notify("privacy-input-layer", str(e))
-            return
+                return str(e)
+            return None
         if count:
             self._write_dib(image_to_dib(masked))
-            self.notify("privacy-input-layer", f"图片已打码 {count} 处敏感区域")
+            return t("image_masked", count=count)
+        return None
 
-    def _handle_hdrop(self):
-        if not self._open():
-            return
-        try:
-            paths = win32clipboard.GetClipboardData(win32con.CF_HDROP)
-        except Exception:
-            return
-        finally:
-            win32clipboard.CloseClipboard()
+    def _handle_hdrop(self) -> str | None:
+        paths = self._read_hdrop()
         if not paths:
-            return
+            return None
         self.copies_dir.mkdir(parents=True, exist_ok=True)
         new_paths = []
-        masked_count = 0
+        pairs = []
         for p in paths:
             src = Path(p)
             if src.suffix.lower() in SUPPORTED_EXTS and src.exists():
                 dst = self.copies_dir / (src.stem + self.file_suffix + src.suffix)
                 try:
-                    result = mask_file(src, self.masker, self.file_suffix, dst=dst)
-                    new_paths.append(str(result.dst))
-                    masked_count += 1
+                    mask_file(src, self.masker, self.file_suffix, dst=dst)
+                    new_paths.append(str(dst))
+                    pairs.append((p, str(dst)))
                     continue
                 except Exception:
                     pass
             new_paths.append(p)
-        if masked_count:
+        if pairs:
+            self._hdrop_last = pairs
             self._write_hdrop(new_paths)
-            self.notify(
-                "privacy-input-layer",
-                f"已替换 {masked_count} 个文件为脱敏副本（{self.copies_dir}）",
-            )
+            return t("hdrop", n=len(pairs), dir=self.copies_dir)
+        return None
+
+    def _restore_hdrop(self) -> str | None:
+        if not self._hdrop_last:
+            return None
+        paths = self._read_hdrop()
+        if not paths or list(paths) != [m for _, m in self._hdrop_last]:
+            return None
+        self._write_hdrop([o for o, _ in self._hdrop_last])
+        self._hdrop_last = None
+        return t("hdrop_restored")

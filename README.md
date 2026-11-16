@@ -1,90 +1,125 @@
 # privacy-input-layer
 
-**AI 隐私输入层**：在内容进入任何 AI 客户端之前完成脱敏。不挑平台、不挑模型——平台自带模型、网页版、桌面端全部通用，因为拦截发生在数据进入客户端**之前**，而不是网络出站时。
+**The privacy input layer for AI.** Mask sensitive text, images and files *before* they enter any AI client — platform-native models, web apps, desktop apps, installed page-as-app windows alike. Interception happens at the OS input boundary (clipboard / paste / file upload), not at the network layer, so it works everywhere regardless of protocol.
 
-全部本地运行：规则引擎 + 本地 OCR + 本地 sqlite 映射，原文永远不离开你的机器。
+100% local: regex rules + local OCR + local sqlite mapping. Your originals never leave your machine.
 
-## 为什么需要它
+[中文文档](README.zh.md)
 
-代理式脱敏（改 baseUrl 的反向代理）只能覆盖自定义端点，对平台自带模型无效——私有协议没有可改的入口。但任何客户端拿数据都绕不开三个 OS 级入口：**剪贴板粘贴、截图粘贴、文件上传**。守住这些入口，就守住了所有平台。
+## Why
 
-## 覆盖能力
+Proxy-style masking (a reverse proxy behind a custom baseUrl) only covers BYOK endpoints — platform-native models speak private protocols with no hookable entry point. But every client obtains data through the same OS-level doors: **clipboard paste, screenshot paste, file upload**. Guard those doors and you guard every platform.
 
-| 场景 | 效果 | 用户操作 |
+## Coverage
+
+| Scenario | Behavior | User effort |
 |---|---|---|
-| 复制文本 → 粘贴进任意 AI 客户端 | 自动替换为占位符（手机号/身份证/银行卡/邮箱/PEM 私钥/IPv4/API 令牌/自定义词） | 零 |
-| 复制 AI 回复（含占位符） | 自动还原为真实值 | 零 |
-| 截图 / 复制图片 → 粘贴 | OCR 定位敏感文字区域，像素打码（不可逆） | 零 |
-| 复制文件 → 粘贴上传 | 剪贴板中的文件路径自动替换为脱敏副本 | 零 |
-| 右键文件 → 发送到 → 脱敏副本 | 生成 `.masked` 副本供上传 | 一步 |
-| AI 产出的文件回填 | `restore-file` 将占位符换回真实值 | 一条命令 |
+| Copy text → paste into any AI client | Auto-replaced with placeholders (CN phone / ID card / bank card / email / PEM private keys / IPv4 / API tokens / assignment-style passwords & secrets / internal URLs / custom keywords) | none |
+| Copy AI reply containing placeholders | Auto-restored to real values | none |
+| Screenshot / copy image → paste | OCR locates sensitive text lines, pixels masked (irreversible) | none |
+| Copy file → paste to upload | Clipboard file paths swapped to masked copies | none |
+| Right-click file → Send to → Masked copy | Generates `.masked` copy for upload | one step |
+| Restore AI-produced files | `restore-file` swaps placeholders back | one command |
 
-支持文件：`txt / md / csv / json / log / docx / xlsx`。
+File formats: `txt / md / csv / json / log / docx / xlsx`.
 
-## 快速开始
+## Quick start
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate        # PowerShell: .venv\Scripts\Activate.ps1
-pip install -e .            # 文本 + 文件脱敏
-pip install -e .[image]     # 加上图片 OCR 打码
-pilayer run                 # 托盘常驻，开始守卫
-pilayer install-sendto      # 可选：右键「发送到 -> 脱敏副本」
+pip install -e .              # text + file masking
+pip install -e .[image]       # add image OCR masking
+pilayer run                   # tray app, guarding starts
+pilayer install-sendto        # optional: right-click "Send to -> Masked copy"
 ```
 
-不想开终端：双击项目根目录的 `启动守卫.bat`（无控制台窗口）。
+No terminal needed: double-click `start-guard.bat` in the project root (no console window).
 
-托盘图标：蓝色 = 守卫开启，灰色 = 暂停。单击图标切换开关。
+Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, open config, open data dir, quit.
 
 ### CLI
 
 ```bash
-pilayer mask-text "张三的手机 13800138000"     # -> 张三的手机 [PHONE_1]
-pilayer restore-text "手机 [PHONE_1]"          # -> 手机 13800138000
+pilayer mask-text "John's phone 13800138000"   # -> John's phone [PHONE_1]
+pilayer restore-text "phone [PHONE_1]"         # -> phone 13800138000
 pilayer mask-file report.docx                  # -> report.masked.docx
 pilayer restore-file ai-output.docx            # -> ai-output.restored.docx
-pilayer stats                                  # 本地映射统计
+pilayer stats                                  # local mapping statistics
 ```
 
-占位符与原文的映射保存在 `%APPDATA%/pilayer/mappings.db`（sqlite，仅本机）。同一原文在多轮对话中复用同一占位符，保证 AI 上下文一致。
+Placeholder↔original mappings live in `%APPDATA%/pilayer/mappings.db` (local sqlite). The same original reuses the same placeholder across turns, keeping AI context consistent.
 
-## 配置
+## Focus-aware mode (default)
 
-`%APPDATA%/pilayer/config.yaml`（首次运行自动生成，模板见 [config.example.yaml](config.example.yaml)）：
+With `guard.mode: focus` the clipboard is masked only while an AI conversation client is in the foreground, and restored when you switch away. Normal copy/paste is never disturbed.
 
-- `guard.*`：文本 / 图片 / 文件路径 / 自动还原 / 通知 各自开关
-- `rules.custom_keywords`：自定义敏感词（人名、项目代号等），如 `["张三", "Project-X"]`
-- `image.min_score` / `image.fill`：OCR 置信度阈值与打码颜色
+**Zero-config auto-detection (`auto_detect: true`)**: a UIA scan of the foreground window classifies any app/site as an AI conversation when it hits a generic signature — no lists required:
 
-## 工作原理
+1. **Model picker controls** (spark-x2.6 / Qwen3.8-Max / gpt-4o / claude-…): matched only on picker-type controls *inside page document subtrees* (including iframes), so browser chrome AI buttons and article prose never trigger it
+2. **AI disclaimer short labels** (≤60 chars: "AI helper", "Powered by inkeep", "内容由 AI 生成"…)
+3. **Chat input signatures** on Edit/Custom/Pane controls across Name/Value/HelpText ("Ask … a question", "prompt", "尽情提问", "想聊点"…), plus short chat headings
 
-1. **事件监听**：`AddClipboardFormatListener` 消息窗口，复制瞬间触发，非轮询。
-2. **规则引擎**：手机号 / 身份证（校验位验证）/ 银行卡（Luhn 校验）/ 邮箱正则 + 自定义词，毫秒级，挡在粘贴之前。
-3. **防自触发**：写入剪贴板后记录序列号，跳过自己引发的事件，避免脱敏↔还原死循环。
-4. **图片**：剪贴板 DIB → RapidOCR 定位文字行 → 命中规则则整行像素填充。
-5. **文件**：复制文件粘贴时生成脱敏副本并替换剪贴板路径；docx 段落级处理（PII 可能跨 run 拆分），xlsx 仅处理字符串单元格、保留公式。
+**Fallback / override lists** (`ai_targets`, optional): process whitelist, browser URL domains, page-title patterns, and `newtab_chat_browsers` for browsers whose new-tab page is a built-in AI chat (e.g. Tabbit). Useful for Electron clients with sparse accessibility trees, or to force/exclude targets.
 
-## 已知限制
+**Race closure**: foreground changes re-evaluate immediately; a 300 ms poll catches in-browser tab switches and title changes; a low-level keyboard hook (`paste_hook: true`) performs a millisecond-scale clipboard compensation at the exact moment Ctrl+V / Shift+Insert is pressed, closing the switch-to-paste window for text. Signature scans are cached 5 s to bound overhead.
 
-- **仅 Windows**（macOS / Linux 在路线图）。
-- 图片打码粒度为 OCR 文字行，会连带遮盖同行的非敏感文字（宁多勿漏）。
-- 触发脱敏重写剪贴板时会清空富文本格式（HTML/RTF），只保留纯文本/位图——这是为了防止客户端从 HTML 格式里读到原文。
-- 复制→粘贴间隔极短（<100ms）时存在竞态窗口；规则引擎足够快，实测正常手速无感。
-- 文件**上传后**客户端直接读磁盘，用户态无法透明拦截，因此文件走"脱敏副本"一步操作；pdf 暂不支持。
-- 人名等无规则特征的 PII 首版靠 `custom_keywords`，NER 模型在路线图。
-- 截图打码不可逆：打码后的图片不含原文，这正是目的。
+`guard.mode: always` switches back to global always-on masking.
 
-## 路线图
+## Configuration
 
-- [ ] NER 本地模型识别人名 / 地址 / 机构名
-- [ ] pdf 脱敏副本
-- [ ] macOS（NSPasteboard 监听）/ Linux
-- [ ] 浏览器扩展：网页端输入框直接拦截
-- [ ] 映射过期与清理策略
+`%APPDATA%/pilayer/config.yaml` (auto-created; template in [config.example.yaml](config.example.yaml)):
 
-## 隐私声明
+- `guard.*`: mode, text/image/hdrop switches, auto_restore, notify, auto_detect, paste_hook
+- `rules.*`: per-rule switches + `custom_keywords` (names, project codenames, …)
+- `ai_targets.*`: fallback identification lists
+- `image.min_score` / `image.fill`: OCR threshold and mask color
+- `ui.language`: `en` / `zh` for tray menu and notifications
 
-本工具不发起任何网络请求。OCR 模型本地推理，映射存本地 sqlite。卸载即删除 `%APPDATA%/pilayer` 即可清除全部数据。
+## How it works
+
+1. **Event-driven clipboard listener** (`AddClipboardFormatListener`), fires on copy, no polling.
+2. **Rule engine**: CN phone / ID card (checksum) / bank card (Luhn) / email / PEM key blocks / IPv4 / token prefixes / assignment-style secrets (`*passwd/pwd/password/secret/token/api_key/access_key*` values, keys preserved, Jinja `{{ }}` refs skipped) / internal URLs (private-IP or templated hosts, plus `rules.internal_domains`) + custom keywords; millisecond-scale, ahead of the paste.
+3. **Self-write suppression**: clipboard sequence numbers skip events caused by our own writes (no mask↔restore loops).
+4. **Images**: clipboard DIB → RapidOCR text lines → rule hit → pixel fill of the whole line.
+5. **Files**: masked copies generated on paste-swap; docx handled per paragraph (PII can span runs), xlsx string cells only (formulas preserved).
+6. **Paste hook**: WH_KEYBOARD_LL intercepts Ctrl+V / Shift+Insert and compensates the clipboard synchronously before the target app reads it.
+
+## Security design
+
+Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Cheat Sheet, PCI DSS 3.3/3.4, GB/T 35273/PIPL and GDPR art 5/32:
+
+- **Encrypted at rest**: mapping originals are stored DPAPI-encrypted (current-user key) in sqlite — PCI DSS 3.4 / ASVS V8. Legacy plaintext rows are migrated automatically on first start. Dedup uses a sha256 column, never decrypting the table.
+- **Storage limitation**: mappings auto-purge after `store.ttl_days` (default 30); manual `pilayer purge` (GDPR art 5(1)(e)).
+- **Lazy restore**: leaving an AI client does NOT write plaintext back to the shared clipboard (clipboard history / RDP / malware can read it). Restoration happens on demand: Ctrl+V / Shift+Insert via the paste hook, or copying placeholder text outside AI. Trade-off: menu/right-click paste outside AI yields placeholders; set `lazy_restore: false` for the old proactive behavior.
+- **Log redaction**: `pilayer.log` records only process names and signature kinds — never window titles, URLs or control text (OWASP Logging Cheat Sheet).
+- **Rule baseline**: checksum/Luhn validation, URI userinfo passwords, PGP/PEM blocks, vendor token families, assignment-style secrets (whole-line bare values, no truncation residue), internal URLs; optional high-entropy rule (`rules.entropy`, off by default). Over-masking is the safe direction.
+- **Placeholder linkage**: the same original reuses the same placeholder across sessions, so an AI could correlate conversations. Accepted trade-off for context consistency; purge resets it.
+- **No keylogging**: the keyboard hook inspects only Ctrl+V / Shift+Insert combinations, never records keystrokes.
+
+## Known limitations
+
+- **Windows only** (macOS / Linux on the roadmap).
+- Image masking granularity is the OCR text line (over-masks neighboring non-sensitive text on the same line — safer direction).
+- Rewriting the clipboard strips rich-text formats (HTML/RTF) to prevent clients reading originals from alternate clipboard formats.
+- Image OCR on window-switch takes hundreds of ms; an extremely fast image paste inside that window can slip through (text is covered by the paste hook).
+- Files read from disk after upload cannot be intercepted transparently in user mode — hence the masked-copy step. PDF not supported yet.
+- docx masking rewrites paragraphs as a whole (PII can span runs), so per-run formatting inside masked paragraphs is lost; xlsx formulas and non-string cells are preserved.
+- Auto-detection depends on clients exposing accessibility trees; a few Electron shells expose sparse trees and need one whitelist line (or launch with `--force-renderer-accessibility`). Rare false positives possible (e.g. a human chat app with model-named controls); disable with `auto_detect: false`.
+- Names/addresses without regex signatures rely on `custom_keywords` for now; local NER on the roadmap.
+- Image masking is irreversible by design: masked pixels contain no originals.
+
+## Roadmap
+
+- [ ] Local NER for names / addresses / organizations
+- [ ] PDF masked copies
+- [ ] macOS (NSPasteboard monitoring) / Linux
+- [ ] Browser extension for in-page input interception (covers widgets with no accessibility signatures)
+- [ ] Mapping expiry / cleanup policy
+
+## Privacy
+
+No network requests at all. OCR runs locally; mappings stay in local sqlite. Delete `%APPDATA%/pilayer` to erase everything. Logs (no secrets, only detection metadata) at `%APPDATA%/pilayer/pilayer.log`.
 
 ## License
 

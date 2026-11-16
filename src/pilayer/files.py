@@ -124,7 +124,7 @@ def mask_file(src: str | Path, masker: TextMasker, suffix: str = ".masked", dst:
     src = Path(src)
     ext = src.suffix.lower()
     if ext not in SUPPORTED_EXTS:
-        raise UnsupportedFile(f"暂不支持 {ext} 文件（支持：{', '.join(sorted(SUPPORTED_EXTS))}）")
+        raise UnsupportedFile(f"Unsupported {ext} file (supported: {', '.join(sorted(SUPPORTED_EXTS))})")
     dst = Path(dst) if dst else masked_path(src, suffix)
     if ext in TEXT_EXTS:
         result = masker.mask(_read_text(src))
@@ -141,7 +141,7 @@ def restore_file(src: str | Path, masker: TextMasker, dst: str | Path | None = N
     src = Path(src)
     ext = src.suffix.lower()
     if ext not in SUPPORTED_EXTS:
-        raise UnsupportedFile(f"暂不支持 {ext} 文件")
+        raise UnsupportedFile(f"Unsupported {ext} file")
     dst = Path(dst) if dst else src.with_name(src.stem + ".restored" + ext)
     if ext in TEXT_EXTS:
         result = masker.restore(_read_text(src))

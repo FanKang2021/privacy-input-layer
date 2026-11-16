@@ -1,26 +1,56 @@
-# privacy-input-layer 配置
-# 实际生效路径：%APPDATA%/pilayer/config.yaml（首次运行自动生成，可复制本文件修改）
+# privacy-input-layer configuration
+# Effective path: %APPDATA%/pilayer/config.yaml (auto-created on first run; copy this file to customize)
 
 guard:
-  text_enabled: true        # 剪贴板文本自动脱敏
-  image_enabled: true       # 剪贴板图片 OCR 打码（需安装 [image] 依赖）
-  hdrop_enabled: true       # 复制文件粘贴时替换为脱敏副本
-  auto_restore: true        # 复制含占位符的 AI 回复时自动还原
-  notify: true              # 托盘气泡通知
+  mode: focus               # focus = mask only while an AI client is foreground; always = global always-on
+  text_enabled: true        # clipboard text masking
+  image_enabled: true       # clipboard image OCR masking (requires [image] extras)
+  hdrop_enabled: true       # swap copied files to masked copies on paste
+  auto_restore: true        # restore placeholders when copying AI replies
+  notify: true              # tray balloon notifications (also toggleable from tray menu)
+  auto_detect: true         # zero-config UI signature detection (model picker / AI disclaimer / chat input)
+  paste_hook: true          # Ctrl+V / Shift+Insert instant clipboard compensation (closes switch-to-paste race)
+  lazy_restore: true        # do NOT write plaintext back to clipboard on leaving AI; restore on demand (Ctrl+V / copy event)
+
+# AI client identification for focus mode: zero-config signatures first, these lists as fallback/override
+ai_targets:
+  processes: [Qoder CN.exe, Qoder.exe, Cursor.exe, Claude.exe, ChatGPT.exe,
+              Windsurf.exe, Trae.exe, Trae CN.exe, CodeBuddy.exe, Comate.exe,
+              Lingma.exe, WorkBuddy.exe]
+  browsers: [chrome.exe, msedge.exe, firefox.exe, brave.exe, Tabbit Browser.exe]
+  newtab_chat_browsers: [Tabbit Browser.exe]   # browsers whose new-tab page is a built-in AI chat
+  newtab_titles: [新标签页, 新建标签页, New Tab, New tab]
+  url_patterns: [chatgpt.com, claude.ai, gemini.google.com, copilot.microsoft.com,
+                 poe.com, perplexity.ai, chat.deepseek.com, kimi.com, moonshot.cn,
+                 tongyi.aliyun.com, yiyan.baidu.com, chatglm.cn, doubao.com,
+                 metaso.cn, chat.qwen.ai, grok.com, chat.mistral.ai, huggingface.co]
+  title_patterns: [ChatGPT, Claude, Gemini, Copilot, Poe, Perplexity, DeepSeek,
+                   Kimi, 通义, 千问, Qwen, 文心, 豆包, 智谱, Grok, Mistral, Meta AI,
+                   Google AI]
 
 rules:
-  phone: true               # 中国大陆手机号
-  idcard: true              # 18 位身份证（含校验位验证）
-  bankcard: true            # 16-19 位银行卡（Luhn 校验）
-  email: true               # 电子邮箱
-  privkey: true             # PEM 私钥块（OPENSSH/RSA/EC 等）
-  ip: true                  # IPv4 地址
-  token: true               # 常见 API 令牌（sk-/ghp_/github_pat_/AKIA/xox-/JWT）
-  custom_keywords: []       # 自定义敏感词，如 ["张三", "内部项目代号"]
+  phone: true               # mainland China mobile numbers
+  idcard: true              # 18-digit ID card (checksum validated)
+  bankcard: true            # 16-19 digit bank card (Luhn validated)
+  email: true               # email addresses
+  privkey: true             # PEM private key blocks (OPENSSH/RSA/EC ...)
+  ip: true                  # IPv4 addresses
+  token: true               # common API tokens (sk-/ghp_/github_pat_/AKIA/xox-/JWT)
+  secret: true              # assignment-style secrets: *password/passwd/pwd/secret/token/api_key/access_key* values (Jinja refs skipped)
+  url: true                 # internal URLs: private-IP hosts, templated {{ }} hosts, internal_domains below
+  internal_domains: []      # extra internal domains to mask in URLs/hosts, e.g. ["corp.example.com"]
+  entropy: false            # opt-in: mask high-entropy (>=4.5) base64/hex-like tokens >=24 chars; more false positives
+  custom_keywords: []       # custom sensitive words, e.g. ["John Doe", "Project-X"]
 
 image:
-  min_score: 0.5            # OCR 置信度阈值
-  fill: [40, 40, 40]        # 打码填充色 RGB
+  min_score: 0.5            # OCR confidence threshold
+  fill: [40, 40, 40]        # mask fill color RGB
 
 files:
-  suffix: ".masked"         # 脱敏副本文件名后缀：report.docx -> report.masked.docx
+  suffix: ".masked"         # masked copy suffix: report.docx -> report.masked.docx
+
+store:
+  ttl_days: 30              # mappings auto-purge after N days (0 = keep forever); manual: pilayer purge
+
+ui:
+  language: en              # tray menu & notifications: en / zh (also toggleable from tray menu)

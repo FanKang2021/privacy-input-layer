@@ -1,6 +1,7 @@
 """托盘应用：常驻守卫 + 开关 + 通知。"""
 
 import ctypes
+import logging
 import os
 import time
 
@@ -11,6 +12,9 @@ from .clipboard import ClipboardWatcher
 from .config import app_dir, load_config
 from .engine import MappingStore, TextMasker
 from .engine.image import ImageMasker
+from .i18n import set_language, t
+
+log = logging.getLogger("pilayer")
 
 
 def _icon_image(active: bool) -> Image.Image:
@@ -25,8 +29,20 @@ def _icon_image(active: bool) -> Image.Image:
 class Application:
     def __init__(self, config_path=None):
         self.cfg = load_config(config_path)
+        set_language(self.cfg.get("ui", {}).get("language", "en"))
         self.dir = app_dir()
         self.store = MappingStore(self.dir / "mappings.db")
+        ttl = self.cfg.get("store", {}).get("ttl_days", 30)
+        if ttl > 0:
+            purged = self.store.purge_expired(ttl)
+            if purged:
+                log.info("purged %d expired mapping(s)", purged)
+            copies = self.dir / "copies"
+            if copies.exists():
+                cutoff = time.time() - ttl * 86400
+                for f in copies.iterdir():
+                    if f.is_file() and f.stat().st_mtime < cutoff:
+                        f.unlink()
         keywords = self.cfg["rules"].get("custom_keywords") or []
         self.masker = TextMasker(self.store, self.cfg["rules"], keywords)
         self.image_masker = ImageMasker(
@@ -38,7 +54,22 @@ class Application:
             self.dir / "copies", self.cfg["files"]["suffix"],
             notify=self.notify,
         )
+        self.focus = None
+        if self.cfg["guard"].get("mode", "focus") == "focus":
+            from .focus import ForegroundWatcher
+            self.focus = ForegroundWatcher(self.cfg, self._on_focus)
+        self.paste_hook = None
+        if self.cfg["guard"].get("paste_hook", True):
+            from .clipboard.paste_hook import PasteHook
+            self.paste_hook = PasteHook(self.watcher.ensure_for_paste)
         self.icon = None
+
+    def _on_focus(self, ai: bool):
+        msg = self.watcher.set_focus(ai)
+        log.info("on_focus ai=%s result=%s", ai, msg)
+        if msg:
+            prefix = t("focus_ai") if ai else t("focus_left")
+            self.notify("privacy-input-layer", prefix + msg)
 
     def notify(self, title: str, msg: str):
         if self.cfg["guard"].get("notify") and self.icon:
@@ -50,22 +81,49 @@ class Application:
     def _toggle(self, icon, item):
         self.watcher.enabled = not self.watcher.enabled
         icon.icon = _icon_image(self.watcher.enabled)
-        state = "已开启" if self.watcher.enabled else "已暂停"
-        self.notify("privacy-input-layer", f"守卫{state}")
+        state = t("guard_state_on") if self.watcher.enabled else t("guard_state_paused")
+        self.notify("privacy-input-layer", state)
 
     def _status_text(self, item):
-        return "守卫：" + ("开启" if self.watcher.enabled else "暂停")
+        return t("guard_on") if self.watcher.enabled else t("guard_paused")
+
+    def _notify_text(self, item):
+        return t("notify_on") if self.cfg["guard"].get("notify") else t("notify_off")
+
+    def _toggle_notify(self, icon, item):
+        self.cfg["guard"]["notify"] = not self.cfg["guard"].get("notify", True)
+        self._save_config()
+        icon.update_menu()
+
+    def _toggle_language(self, icon, item):
+        lang = "zh" if self.cfg.get("ui", {}).get("language", "en") == "en" else "en"
+        self.cfg.setdefault("ui", {})["language"] = lang
+        set_language(lang)
+        self._save_config()
+        icon.update_menu()
+
+    def _save_config(self):
+        import yaml
+        (self.dir / "config.yaml").write_text(
+            yaml.safe_dump(self.cfg, allow_unicode=True, sort_keys=False), encoding="utf-8"
+        )
 
     def _menu(self):
         return pystray.Menu(
             pystray.MenuItem(self._status_text, self._toggle, default=True),
-            pystray.MenuItem("打开配置", lambda: os.startfile(str(self.dir / "config.yaml"))),
-            pystray.MenuItem("打开数据目录", lambda: os.startfile(str(self.dir))),
+            pystray.MenuItem(self._notify_text, self._toggle_notify),
+            pystray.MenuItem(lambda item: t("language"), self._toggle_language),
+            pystray.MenuItem(lambda item: t("open_config"), lambda: os.startfile(str(self.dir / "config.yaml"))),
+            pystray.MenuItem(lambda item: t("open_data"), lambda: os.startfile(str(self.dir))),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("退出", self._quit),
+            pystray.MenuItem(lambda item: t("quit"), self._quit),
         )
 
     def _quit(self, icon, item):
+        if self.paste_hook:
+            self.paste_hook.stop()
+        if self.focus:
+            self.focus.stop()
         self.watcher.stop()
         icon.stop()
         self.store.close()
@@ -78,6 +136,10 @@ class Application:
             icon.visible = False
             icon.visible = True
         self.watcher.start()
+        if self.paste_hook:
+            self.paste_hook.start()
+        if self.focus:
+            self.focus.start()
 
     def _promote_tray_icon(self) -> bool:
         # Win11 默认隐藏新托盘图标（IsPromoted 空），只提升本应用自己的条目
@@ -106,10 +168,17 @@ class Application:
         return False
 
     def run(self):
+        logging.basicConfig(
+            filename=str(self.dir / "pilayer.log"),
+            level=logging.INFO,
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        )
+        log.info("guard starting, mode=%s", self.cfg["guard"].get("mode", "focus"))
         # 单实例：重复启动时静默退出，避免两个守卫互相改写剪贴板
         kernel32 = ctypes.windll.kernel32
         self._mutex = kernel32.CreateMutexW(None, False, "PilayerSingleInstance")
         if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            log.info("another instance running, exit")
             return
         self.icon = pystray.Icon(
             "pilayer", _icon_image(True), "privacy-input-layer", menu=self._menu()

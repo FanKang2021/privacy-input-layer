@@ -1,4 +1,4 @@
-"""CLI：pilayer run / mask-text / restore-text / mask-file / restore-file / stats。"""
+"""CLI: pilayer run / mask-text / restore-text / mask-file / restore-file / stats / install-sendto."""
 
 import argparse
 import sys
@@ -18,22 +18,23 @@ def _build_masker() -> TextMasker:
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="pilayer",
-        description="AI 隐私输入层：内容进入 AI 客户端之前完成脱敏，全部本地运行",
+        description="Privacy input layer for AI: mask content before it enters any AI client, 100% local",
     )
     sub = parser.add_subparsers(dest="cmd")
-    sub.add_parser("run", help="启动托盘守卫（默认）")
-    p = sub.add_parser("mask-text", help="脱敏一段文本并输出")
+    sub.add_parser("run", help="start the tray guard (default)")
+    p = sub.add_parser("mask-text", help="mask a text string and print it")
     p.add_argument("text")
-    p = sub.add_parser("restore-text", help="还原文本中的占位符")
+    p = sub.add_parser("restore-text", help="restore placeholders in a text string")
     p.add_argument("text")
-    p = sub.add_parser("mask-file", help="生成文件脱敏副本")
+    p = sub.add_parser("mask-file", help="create a masked copy of a file")
     p.add_argument("path")
-    p.add_argument("--dst", help="输出路径（默认 <name>.masked.<ext>）")
-    p = sub.add_parser("restore-file", help="回填文件中的占位符")
+    p.add_argument("--dst", help="output path (default <name>.masked.<ext>)")
+    p = sub.add_parser("restore-file", help="restore placeholders in a file")
     p.add_argument("path")
-    p.add_argument("--dst", help="输出路径（默认 <name>.restored.<ext>）")
-    sub.add_parser("stats", help="查看本地映射统计")
-    sub.add_parser("install-sendto", help="安装右键『发送到 -> 脱敏副本』")
+    p.add_argument("--dst", help="output path (default <name>.restored.<ext>)")
+    sub.add_parser("stats", help="show local mapping statistics")
+    sub.add_parser("purge", help="delete expired mappings (store.ttl_days)")
+    sub.add_parser("install-sendto", help='install right-click "Send to -> Masked copy"')
     args = parser.parse_args(argv)
     cmd = args.cmd or "run"
 
@@ -47,34 +48,38 @@ def main(argv=None):
         from pathlib import Path
 
         sendto = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "SendTo"
-        bat = sendto / "脱敏副本.bat"
+        bat = sendto / "Masked copy.bat"
         bat.write_text(
             f'@echo off\r\n"{sys.executable}" -m pilayer mask-file "%1"\r\npause\r\n',
             encoding="gbk",
         )
-        print(f"已安装：{bat}")
+        print(f"Installed: {bat}")
         return 0
 
     masker = _build_masker()
     if cmd == "mask-text":
         r = masker.mask(args.text)
         print(r.text)
-        print(f"已脱敏 {r.count} 处", file=sys.stderr)
+        print(f"masked {r.count} item(s)", file=sys.stderr)
     elif cmd == "restore-text":
         r = masker.restore(args.text)
         print(r.text)
-        print(f"已还原 {r.count} 处，无映射 {len(r.missing)} 处", file=sys.stderr)
+        print(f"restored {r.count}, unmapped {len(r.missing)}", file=sys.stderr)
     elif cmd == "mask-file":
         r = mask_file(args.path, masker, dst=args.dst)
-        print(f"{r.dst}（脱敏 {r.count} 处）")
+        print(f"{r.dst} (masked {r.count} item(s))")
     elif cmd == "restore-file":
         r = restore_file(args.path, masker, dst=args.dst)
-        print(f"{r.dst}（还原 {r.count} 处）")
+        print(f"{r.dst} (restored {r.count} item(s))")
     elif cmd == "stats":
         s = masker.store.stats()
-        print(f"映射总数：{s['total']}")
+        print(f"total mappings: {s['total']}")
         for kind, n in s["by_kind"].items():
             print(f"  {kind}: {n}")
+    elif cmd == "purge":
+        ttl = load_config().get("store", {}).get("ttl_days", 30)
+        n = masker.store.purge_expired(ttl)
+        print(f"purged {n} expired mapping(s) (ttl={ttl}d)")
     return 0
 
 

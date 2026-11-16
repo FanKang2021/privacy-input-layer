@@ -2,6 +2,7 @@
 
 from PIL import Image, ImageDraw
 
+from ..i18n import t
 from .rules import find_matches
 
 
@@ -23,9 +24,7 @@ class ImageMasker:
             try:
                 from rapidocr_onnxruntime import RapidOCR
             except ImportError as e:
-                raise ImageOCRUnavailable(
-                    "图片打码需要 OCR 依赖：pip install privacy-input-layer[image]"
-                ) from e
+                raise ImageOCRUnavailable(t("ocr_missing")) from e
             self._ocr = RapidOCR()
         return self._ocr
 
