@@ -87,8 +87,12 @@ _user32.GetAsyncKeyState.restype = ctypes.c_short
 
 
 class PasteHook:
+    # 补发原粘贴键时携带的标记：钩子见标记放行，避免自触发循环
+    MAGIC = 0x50494C59
+
     def __init__(self, on_paste, drain=None):
-        """on_paste() -> True 表示已标记注入，吞掉该粘贴键；drain 在泵循环执行实际注入。"""
+        """on_paste() -> True 表示已标记注入；钩子吞键后由 worker 线程处理，
+        不受 LL 钩子超时限制（长文本剪贴板锁占用久，同步读会漏）。"""
         self.on_paste = on_paste
         self.drain = drain or (lambda: None)
         self._stop = threading.Event()
@@ -104,6 +108,34 @@ class PasteHook:
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=2)
+
+    def _worker(self, vk, ctrl, shift):
+        try:
+            if not self.on_paste():
+                self._resend(vk, ctrl, shift)
+        except Exception as e:
+            log.warning("paste worker error: %s", e)
+            self._resend(vk, ctrl, shift)
+
+    def _resend(self, vk, ctrl, shift):
+        """未变换时补发原组合键；带 MAGIC 标记令钩子放行。"""
+        ev = []
+        mods = [(VK_CONTROL, ctrl), (VK_SHIFT, shift)]
+        for m, on in mods:
+            if on:
+                ev.append((m, False))
+        ev.append((vk, False))
+        ev.append((vk, True))
+        for m, on in reversed(mods):
+            if on:
+                ev.append((m, True))
+        inputs = []
+        for code, up in ev:
+            inp = INPUT(type=INPUT_KEYBOARD)
+            inp.union.ki = KEYBDINPUT(code, 0, KEYEVENTF_KEYUP if up else 0, 0, self.MAGIC)
+            inputs.append(inp)
+        arr = (INPUT * len(inputs))(*inputs)
+        _user32.SendInput(len(inputs), arr, ctypes.sizeof(INPUT))
 
     def _run(self):
         # 钩子事件投递到安装线程，必须在本线程泵消息
@@ -126,11 +158,16 @@ class PasteHook:
         try:
             if ncode >= 0 and wparam in (win32con.WM_KEYDOWN, win32con.WM_SYSKEYDOWN):
                 ks = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+                if ks.dwExtraInfo == self.MAGIC:
+                    return _user32.CallNextHookEx(self._hook, ncode, wparam, lparam)
                 ctrl = _user32.GetAsyncKeyState(VK_CONTROL) & 0x8000
                 shift = _user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
                 if (ks.vkCode == VK_V and ctrl) or (ks.vkCode == VK_INSERT and shift):
-                    if self.on_paste():
-                        return 1  # 已注入，吞掉原粘贴键
+                    threading.Thread(
+                        target=self._worker, args=(ks.vkCode, bool(ctrl), bool(shift)),
+                        daemon=True,
+                    ).start()
+                    return 1  # 吞键，worker 决定注入或补发
         except Exception as e:
             log.warning("paste hook error: %s", e)
         return _user32.CallNextHookEx(self._hook, ncode, wparam, lparam)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.2
+
+### Fixed
+- Long-text paste漏掩: paste handling moved off the LL-hook callback into a
+  worker thread (full clipboard-lock retries; hook timeout no longer truncates
+  reads on large copies); untransformed pastes re-send the original combo with
+  a magic marker (no hook self-loop)
+- Stray shortcuts / search-popup on paste: injection now waits for physical
+  Ctrl/Shift release before sending unicode (chars were arriving as
+  Ctrl+<char> shortcuts, e.g. Ctrl+P opening quick-open)
+- New-tab chat detection: window title matched by prefix before " - Browser"
+  (full title carries suffix; address-bar UIA value may be placeholder text)
+
 ## 0.4.1
 
 ### Added

@@ -258,7 +258,9 @@ class ForegroundWatcher:
         if proc not in [n.lower() for n in t.get("newtab_chat_browsers", [])]:
             return False
         newtab_titles = [s.lower() for s in t.get("newtab_titles", [])]
-        return url == "" or (title or "").lower() in newtab_titles
+        # 窗口标题带 " - Browser" 后缀；地址栏 UIA Value 可能是占位文案而非空串
+        prefix = (title or "").split(" - ")[0].strip().lower()
+        return url == "" or prefix in newtab_titles
 
     def _ui_signature(self, hwnd, title: str) -> str | None:
         if not self.cfg.get("guard", {}).get("auto_detect", True):

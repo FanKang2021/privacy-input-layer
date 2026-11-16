@@ -86,3 +86,16 @@ def test_ai_disclaimer_markers():
     assert _AI_DISCLAIMER_RE.search("AI helper")
     assert _AI_DISCLAIMER_RE.search("Powered by inkeep")
     assert not _AI_DISCLAIMER_RE.search("本文讨论了 AI 生成内容在法律实践中的若干问题与展望")
+
+def test_newtab_title_with_browser_suffix():
+    from pilayer.focus import ForegroundWatcher
+    cfg = {
+        "ai_targets": {
+            "newtab_chat_browsers": ["Tabbit Browser.exe"],
+            "newtab_titles": ["新标签页", "New Tab"],
+        }
+    }
+    fw = ForegroundWatcher(cfg, lambda ai: None)
+    assert fw._is_newtab_chat("tabbit browser.exe", "搜索，或输入网址", "新标签页 - Tabbit")
+    assert fw._is_newtab_chat("tabbit browser.exe", "", "新标签页 - Tabbit")
+    assert not fw._is_newtab_chat("tabbit browser.exe", "https://github.com", "GitHub - Tabbit")

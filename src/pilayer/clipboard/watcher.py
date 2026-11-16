@@ -304,7 +304,7 @@ class ClipboardWatcher:
         if not self.cfg.get("paste_injection", True):
             self.ensure_for_paste()
             return False
-        text = self._read_text(fast=True)
+        text = self._read_text()
         if not text:
             return False
         if self.mode == "focus":
@@ -341,13 +341,19 @@ class ClipboardWatcher:
         if not target:
             return
         self._pending_inject = None
-        from .paste_hook import send_unicode
-        # 让被吞的原始按键完全落定，避免首字符被输入队列合并丢弃
-        time.sleep(0.05)
-        ok = send_unicode(target)
+        from . import paste_hook
+        # 等物理 Ctrl/Shift 释放再注入，否则注入字符变成 Ctrl+<char> 快捷键
+        deadline = time.time() + 0.5
+        while time.time() < deadline and (
+            paste_hook._user32.GetAsyncKeyState(0x11) & 0x8000
+            or paste_hook._user32.GetAsyncKeyState(0x10) & 0x8000
+        ):
+            time.sleep(0.01)
+        time.sleep(0.02)
+        ok = paste_hook.send_unicode(target)
         log.info("paste inject drain ok=%s len=%d", ok, len(target))
         if not ok:
-            self._write_text(target, fast=True)
+            self._write_text(target)
 
     def ensure_for_paste(self):
         """粘贴键瞬间的毫秒级补偿：只处理文本，图片/文件走切窗路径。"""
