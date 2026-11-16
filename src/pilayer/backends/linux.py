@@ -79,7 +79,6 @@ class LinuxGuard:
             self.ACTIVE = self.d.intern_atom("_NET_ACTIVE_WINDOW")
             self.WMCLASS = self.d.intern_atom("WM_CLASS")
             self.NETNAME = self.d.intern_atom("_NET_WM_NAME")
-            self.d.xfixes_query_version(5, 0)
             xfixes.select_selection_input(
                 self.d, self.win, self.CLIP,
                 xfixes.XFixesSetSelectionOwnerNotifyMask,
