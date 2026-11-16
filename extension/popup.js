@@ -1,4 +1,4 @@
-chrome.storage.local.get({ mappings: [], enabled: true, allSites: false }, (st) => {
+chrome.storage.local.get({ mappings: [], enabled: true, allSites: true }, (st) => {
   document.getElementById("count").textContent = st.mappings.length;
   document.getElementById("enabled").checked = st.enabled;
   document.getElementById("allSites").checked = st.allSites;

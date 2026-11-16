@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.5
+
+### Fixed
+- Extension paste interception now synchronous: config cached in memory
+  (initial load + onChanged); preventDefault inside async storage callback
+  missed the default-action window (extension appeared ineffective)
+- allSites defaults to true: internal-scheme new-tab pages and unlisted hosts
+  were skipped; masking only fires on secret detection (safe direction)
+
 ## 0.4.4
 
 ### Fixed
