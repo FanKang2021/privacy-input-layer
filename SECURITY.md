@@ -37,6 +37,19 @@ acknowledge within 72 hours and to publish a fix + advisory for confirmed issues
 - Placeholder reuse across sessions allows an AI to correlate conversations;
   purge resets linkage.
 
+## Platform notes
+
+- **macOS**: paste hook + injection require Accessibility permission (System
+  Settings → Privacy & Security → Accessibility). Without it the guard degrades
+  to clipboard-compensation on copy. Mapping originals use the same local
+  encrypted store; Keychain integration is on the roadmap.
+- **Linux Wayland**: global input injection and foreground queries are forbidden
+  by the compositor security model; the guard degrades to clipboard-only
+  always-on. X11 sessions get the full feature set.
+- **Browser extension**: masks at DOM paste time; mappings live in
+  `chrome.storage.local` (profile-local). The extension never sends data off
+  device; it has no network permissions.
+
 ## Supported versions
 
 | Version | Supported |

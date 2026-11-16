@@ -44,6 +44,27 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 
 托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**开机自启**、打开配置、打开数据目录、退出。
 
+## 平台支持
+
+| 平台 | 剪贴板守卫 | 焦点感知 | 粘贴注入 | 图片 OCR | 托盘 |
+|---|---|---|---|---|---|
+| Windows | ✓ | ✓（UIA 签名） | ✓ | ✓ | ✓ |
+| macOS | ✓ | ✓（bundle ID + AX 扫描） | ✓（需辅助功能权限） | 路线图 | ✓ |
+| Linux X11 | ✓ | ✓（WM_CLASS/标题） | ✓（xdotool） | 路线图 | ✓（需系统托盘） |
+| Linux Wayland | 降级 | 仅常开 | ✗（安全模型禁止） | ✗ | ✓ |
+| Web（扩展） | DOM 粘贴掩码 | 已知 AI _host + 全站开关 | n/a | n/a | popup |
+
+macOS/Linux 后端与 Windows 参考实现共享同一引擎（规则/本地映射/i18n）；CI 在
+macos-latest 与 ubuntu-latest（Xvfb）验证。Wayland 安全模型禁止全局输入注入与
+前台查询，守卫如实降级为仅剪贴板常开模式。
+
+### 浏览器扩展（MV3）
+
+chrome://extensions → 开发者模式 → 加载已解压的扩展程序 → 选 `extension/`。
+在网页聊天输入框粘贴时即时掩码（默认已知 AI _host，popup 可开全站），补 OS 层
+对无无障碍特征 widget 的盲区。映射存 `chrome.storage.local`；在 AI 外复制回复时
+由 OS 守卫还原占位符。
+
 ## 支持的客户端
 
 三层检测：**精选名单**（已知桌面壳）+ **零配置 UIA 签名**（未知应用/网站）+ **自学习**（从未分类应用复制 ≥2 个占位符即学习其进程；在 `ai_targets.learned_processes` 删除条目可撤销）。

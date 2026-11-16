@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+- macOS backend: NSPasteboard polling, CGEventTap paste hook + Unicode injection
+  (Accessibility permission), NSWorkspace focus + AX signature scan, tray app
+- Linux X11 backend: XFixes selection events, XGrabKey paste hook, xdotool
+  injection (clipboard-write fallback), _NET_ACTIVE_WINDOW focus, tray app
+- Linux Wayland honest degradation: clipboard-only always-on (wl-clipboard)
+- MV3 browser extension: DOM paste masking in web chat inputs (known AI hosts +
+  all-sites toggle), JS port of core rules, popup stats/clear, node unit tests
+- CI matrix: windows-latest / macos-latest / ubuntu-latest (Xvfb) + node job
+- Platform support matrix in READMEs; SECURITY platform notes
+
+### Notes
+- Windows reference path untouched (risk isolation); mac/Linux share the engine
+- macOS/Linux image OCR and Keychain/secret-service integration: roadmap
+- Excluded by decision: NER (model supply chain unverifiable here), code signing
+  (paid cert + identity), opt-in LLM review (niche + heavy) — remain on roadmap
+
 ## 0.3.0
 
 ### Added

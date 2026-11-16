@@ -40,8 +40,16 @@ def main(argv=None):
     cmd = args.cmd or "run"
 
     if cmd == "run":
-        from .app import Application
-        Application().run()
+        import sys as _sys
+        if _sys.platform == "win32":
+            from .app import Application
+            Application().run()
+        elif _sys.platform == "darwin":
+            from .backends.macos import MacApp
+            MacApp().run()
+        else:
+            from .backends.linux import LinuxApp
+            LinuxApp().run()
         return 0
 
     if cmd == "install-sendto":

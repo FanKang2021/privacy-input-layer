@@ -44,6 +44,30 @@ No terminal needed: double-click `start-guard.bat` in the project root (no conso
 
 Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **Start with Windows**, open config, open data dir, quit.
 
+## Platform support
+
+| Platform | Clipboard guard | Focus-aware | Paste injection | Image OCR | Tray |
+|---|---|---|---|---|---|
+| Windows | yes | yes (UIA signatures) | yes | yes | yes |
+| macOS | yes | yes (bundle ID + AX scan) | yes (needs Accessibility permission) | roadmap | yes |
+| Linux X11 | yes | yes (WM_CLASS / title) | yes (xdotool) | roadmap | yes (system tray required) |
+| Linux Wayland | degraded | always-on only | no (security model) | no | yes |
+| Web (extension) | DOM paste masking | known AI hosts + all-sites toggle | n/a | n/a | popup |
+
+macOS/Linux backends share the same engine (rules, DPAPI-equivalent local mapping,
+i18n) as the Windows reference implementation; CI verifies them on
+macos-latest and ubuntu-latest (Xvfb). Wayland's security model forbids global
+input injection and foreground queries, so the guard honestly degrades to
+clipboard-only always-on there.
+
+### Browser extension (MV3)
+
+Load `extension/` unpacked (chrome://extensions → Developer mode → Load unpacked).
+It masks secrets at paste time inside web chat inputs (known AI hosts by default,
+all-sites toggle in popup), complementing the OS layer for widgets without
+accessibility signatures. Mappings stay in `chrome.storage.local`; the OS guard
+restores placeholders when you copy replies outside AI.
+
 ## Supported clients
 
 Three detection layers: **curated list** (known desktop shells) + **zero-config UIA signatures** (unknown apps/sites) + **self-learning** (copying ≥2 placeholders from an unclassified app learns its process; remove entries under `ai_targets.learned_processes` to unlearn).

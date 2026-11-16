@@ -7,13 +7,34 @@ on:
 
 jobs:
   test:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: X11 test deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool
       - name: Install
         run: pip install -e .[dev]
+      - name: Test (Linux under Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pytest -q
       - name: Test
+        if: runner.os != 'Linux'
         run: pytest -q
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Extension rule tests
+        run: node --test "extension/test/*.test.js"
