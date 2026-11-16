@@ -35,12 +35,14 @@ def test_x11_clipboard_roundtrip():
         g.write_text("roundtrip 13800138000")
         time.sleep(0.4)
         out = subprocess.run(
-            ["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True
+            ["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True,
+            timeout=5,
         ).stdout
         assert out == "roundtrip 13800138000"
         subprocess.run(
             ["xclip", "-selection", "clipboard", "-i"],
-            input="external 13900139000", text=True, capture_output=True,
+            input="external 13900139000", text=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
         )
         time.sleep(0.4)
         assert g.read_text() == "external 13900139000"

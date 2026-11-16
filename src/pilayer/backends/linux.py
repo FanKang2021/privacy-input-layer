@@ -97,22 +97,22 @@ class LinuxGuard:
 
     def read_text(self):
         if self.wayland:
-            r = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True)
+            r = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True, timeout=5)
             return r.stdout if r.returncode == 0 else None
         if not self._tool:
             return None
         if self._tool == "xclip":
             r = subprocess.run(["xclip", "-selection", "clipboard", "-o"],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, timeout=5)
         else:
             r = subprocess.run(["xsel", "--clipboard", "--output"],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, timeout=5)
         return r.stdout if r.returncode == 0 else None
 
     def write_text(self, text):
         if self.wayland:
             subprocess.run(["wl-copy"], input=text, text=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
             self._last_clip = text
             return
         if not self._tool:
@@ -122,11 +122,11 @@ class LinuxGuard:
         if self._tool == "xclip":
             subprocess.run(["xclip", "-selection", "clipboard", "-i"],
                            input=text, text=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
         else:
             subprocess.run(["xsel", "--clipboard", "--input"],
                            input=text, text=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
         self._last_clip = text
 
     # ---------- focus ----------
@@ -157,7 +157,7 @@ class LinuxGuard:
             return False
         r = subprocess.run(
             ["xdotool", "type", "--clearmodifiers", "--delay", "1", text],
-            capture_output=True,
+            capture_output=True, timeout=10,
         )
         return r.returncode == 0
 
