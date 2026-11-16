@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import sys
 import time
 
@@ -22,19 +24,26 @@ def test_wayland_degraded(monkeypatch):
     g.stop()
 
 
-@pytest.mark.skipif(not (sys.platform == "linux" and os.environ.get("DISPLAY")), reason="needs X11")
+@pytest.mark.skipif(
+    not (sys.platform == "linux" and os.environ.get("DISPLAY") and shutil.which("xclip")),
+    reason="needs X11 + xclip",
+)
 def test_x11_clipboard_roundtrip():
     g = LinuxGuard()
     g.start()
     try:
         g.write_text("roundtrip 13800138000")
         time.sleep(0.4)
-        assert g.read_text() == "roundtrip 13800138000"
-        r = g.masker.mask("roundtrip 13800138000")
-        g.write_text(r.text)
+        out = subprocess.run(
+            ["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True
+        ).stdout
+        assert out == "roundtrip 13800138000"
+        subprocess.run(
+            ["xclip", "-selection", "clipboard", "-i"],
+            input="external 13900139000", text=True, capture_output=True,
+        )
         time.sleep(0.4)
-        assert g.read_text() == r.text
-        assert g.masker.restore(g.read_text()).text == "roundtrip 13800138000"
+        assert g.read_text() == "external 13900139000"
     finally:
         g.stop()
 

@@ -207,47 +207,54 @@ class LinuxGuard:
         from Xlib import X
         while not self._stop.is_set():
             try:
-                kind, payload = self._cmds.get_nowait()
-            except queue.Empty:
-                kind = None
-            if kind == "write":
-                self._sel_text = payload
-                self.win.set_selection_owner(self.CLIP, X.CurrentTime)
-                self.d.flush()
-                self._write_done.set()
-            elif kind == "read":
-                self.win.convert_selection(self.CLIP, self.UTF8, self.PROP, X.CurrentTime)
-                self.d.flush()
-            elif kind == "key":
-                from Xlib.ext import xtest
-                mod = X.ControlMask if payload == self._kc_v else X.ShiftMask
-                xtest.fake_input(self.d, X.KeyPress, payload, mod)
-                xtest.fake_input(self.d, X.KeyRelease, payload, mod)
-                self.d.flush()
-            while self.d.pending_events():
-                ev = self.d.next_event()
-                if ev.type == X.SelectionNotify:
-                    prop = self.win.get_full_property(self.PROP, self.UTF8)
-                    self.win.delete_property(self.PROP)
-                    self._read_result = bytes(prop.value).decode("utf-8", "replace") if prop else None
-                    self._read_done.set()
-                elif ev.type == X.SelectionRequest:
-                    self._serve_selection(ev)
-                elif ev.type == X.SelectionClear:
-                    self._sel_text = None
-                elif ev.type == X.KeyPress:
-                    # grab 已消费按键；worker 决定是否注入，未处理则补发原键
-                    threading.Thread(target=self._paste_worker, args=(ev.detail,), daemon=True).start()
-                elif ev.type == self.d.xfixes_event_base + 0:  # XFixesSelectionNotify
-                    threading.Thread(target=self._on_copy, daemon=True).start()
-            if not self.wayland:
-                cls, name = self._frontmost()
-                ai = self._classify(cls, name) if self.mode == "focus" else True
-                if ai != self.ai_focused:
-                    self.ai_focused = ai
-                    if ai:
-                        threading.Thread(target=self._on_copy, daemon=True).start()
+                self._loop_once(X)
+            except Exception as e:
+                # python-xlib 对个别 X 错误解析有缺陷；守卫不可因瞬态错误死掉
+                log.warning("X loop error: %s", e)
             self._stop.wait(0.02)
+
+    def _loop_once(self, X):
+        try:
+            kind, payload = self._cmds.get_nowait()
+        except queue.Empty:
+            kind = None
+        if kind == "write":
+            self._sel_text = payload
+            self.win.set_selection_owner(self.CLIP, X.CurrentTime)
+            self.d.flush()
+            self._write_done.set()
+        elif kind == "read":
+            self.win.convert_selection(self.CLIP, self.UTF8, self.PROP, X.CurrentTime)
+            self.d.flush()
+        elif kind == "key":
+            from Xlib.ext import xtest
+            mod = X.ControlMask if payload == self._kc_v else X.ShiftMask
+            xtest.fake_input(self.d, X.KeyPress, payload, mod)
+            xtest.fake_input(self.d, X.KeyRelease, payload, mod)
+            self.d.flush()
+        while self.d.pending_events():
+            ev = self.d.next_event()
+            if ev.type == X.SelectionNotify:
+                prop = self.win.get_full_property(self.PROP, self.UTF8)
+                self.win.delete_property(self.PROP)
+                self._read_result = bytes(prop.value).decode("utf-8", "replace") if prop else None
+                self._read_done.set()
+            elif ev.type == X.SelectionRequest:
+                self._serve_selection(ev)
+            elif ev.type == X.SelectionClear:
+                self._sel_text = None
+            elif ev.type == X.KeyPress:
+                # grab 已消费按键；worker 决定是否注入，未处理则补发原键
+                threading.Thread(target=self._paste_worker, args=(ev.detail,), daemon=True).start()
+            elif ev.type == self.d.xfixes_event_base + 0:  # XFixesSelectionNotify
+                threading.Thread(target=self._on_copy, daemon=True).start()
+        if not self.wayland:
+            cls, name = self._frontmost()
+            ai = self._classify(cls, name) if self.mode == "focus" else True
+            if ai != self.ai_focused:
+                self.ai_focused = ai
+                if ai:
+                    threading.Thread(target=self._on_copy, daemon=True).start()
 
     def _paste_worker(self, detail):
         if not self._handle_paste():
