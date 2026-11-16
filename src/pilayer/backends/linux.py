@@ -111,17 +111,22 @@ class LinuxGuard:
 
     def write_text(self, text):
         if self.wayland:
-            subprocess.run(["wl-copy"], input=text, text=True, capture_output=True)
+            subprocess.run(["wl-copy"], input=text, text=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self._last_clip = text
             return
         if not self._tool:
             return
+        # xclip/xsel -i 会 fork 守护进程持有 selection；若继承 capture 管道会令
+        # subprocess.run 等待 EOF 永久挂起 → 写路径一律 DEVNULL
         if self._tool == "xclip":
             subprocess.run(["xclip", "-selection", "clipboard", "-i"],
-                           input=text, text=True, capture_output=True)
+                           input=text, text=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
             subprocess.run(["xsel", "--clipboard", "--input"],
-                           input=text, text=True, capture_output=True)
+                           input=text, text=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self._last_clip = text
 
     # ---------- focus ----------
