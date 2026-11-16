@@ -1,13 +1,14 @@
 """Linux backend: X11 full feature; Wayland degraded (clipboard-only, always-on).
 
-X11: XFixes selection events, XGrabKey paste hook, xdotool injection (fallback:
-clipboard write), _NET_ACTIVE_WINDOW focus. Wayland's security model forbids
-global input injection / foreground queries, so the guard degrades honestly.
+Clipboard I/O delegates to xclip/xsel (robust C selection implementation);
+change detection polls. Xlib is used only for XGrabKey paste hook and
+_NET_ACTIVE_WINDOW focus (core requests). Injection via xdotool.
+Wayland's security model forbids global injection / foreground queries, so the
+guard degrades honestly to clipboard-only always-on (wl-clipboard).
 """
 
 import logging
 import os
-import queue
 import shutil
 import subprocess
 import threading
@@ -41,6 +42,13 @@ def classify_linux(cls: str, name: str, cfg: dict) -> bool:
     return False
 
 
+def _clip_tool():
+    for tool in ("xclip", "xsel"):
+        if shutil.which(tool):
+            return tool
+    return None
+
+
 class LinuxGuard:
     def __init__(self, config_path=None):
         self.cfg = load_config(config_path)
@@ -59,38 +67,31 @@ class LinuxGuard:
         self.wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
         self.mode = "always" if self.wayland else self.cfg["guard"].get("mode", "focus")
         self._stop = threading.Event()
-        self._sel_text = None
-        self._read_result = None
-        self._read_done = threading.Event()
-        self._write_done = threading.Event()
-        self._cmds = queue.Queue()
         self._last_clip = None
+        self._tool = None if self.wayland else _clip_tool()
+        self._d = None
+        self._kc_v = self._kc_i = None
         if not self.wayland:
-            from Xlib import display, X
-            from Xlib.ext import xfixes
-            self._X = X
-            self.d = display.Display()
-            self.root = self.d.screen().root
-            self.win = self.root.create_window(
-                -1, -1, 1, 1, 0, self.d.screen().root_depth,
-                X.CopyFromParent, X.CopyFromParent,
-                event_mask=X.PropertyChangeMask,
-            )
-            self.CLIP = self.d.intern_atom("CLIPBOARD")
-            self.UTF8 = self.d.intern_atom("UTF8_STRING")
-            self.PROP = self.d.intern_atom("PILAYER_SEL")
-            self.ACTIVE = self.d.intern_atom("_NET_ACTIVE_WINDOW")
-            self.WMCLASS = self.d.intern_atom("WM_CLASS")
-            self.NETNAME = self.d.intern_atom("_NET_WM_NAME")
-            xfixes.select_selection_input(
-                self.d, self.win, self.CLIP,
-                xfixes.XFixesSetSelectionOwnerNotifyMask,
-            )
-            kc = self.d.keysym_to_keycode(0x76)  # v
-            self.root.grab_key(kc, X.ControlMask, True, X.GrabModeAsync, X.GrabModeAsync)
-            ki = self.d.keysym_to_keycode(0xff63)  # Insert
-            self.root.grab_key(ki, X.ShiftMask, True, X.GrabModeAsync, X.GrabModeAsync)
-            self._kc_v, self._kc_i = kc, ki
+            if not self._tool:
+                log.warning("xclip/xsel not found; clipboard guard inactive")
+            try:
+                from Xlib import display, X
+                self._X = X
+                self._d = display.Display()
+                root = self._d.screen().root
+                self._root = root
+                self._ACTIVE = self._d.intern_atom("_NET_ACTIVE_WINDOW")
+                self._WMCLASS = self._d.intern_atom("WM_CLASS")
+                self._NETNAME = self._d.intern_atom("_NET_WM_NAME")
+                self._UTF8 = self._d.intern_atom("UTF8_STRING")
+                kc = self._d.keysym_to_keycode(0x76)  # v
+                root.grab_key(kc, X.ControlMask, True, X.GrabModeAsync, X.GrabModeAsync)
+                ki = self._d.keysym_to_keycode(0xff63)  # Insert
+                root.grab_key(ki, X.ShiftMask, True, X.GrabModeAsync, X.GrabModeAsync)
+                self._kc_v, self._kc_i = kc, ki
+            except Exception as e:
+                log.warning("X11 hook unavailable: %s", e)
+                self._d = None
 
     # ---------- clipboard ----------
 
@@ -98,34 +99,43 @@ class LinuxGuard:
         if self.wayland:
             r = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True)
             return r.stdout if r.returncode == 0 else None
-        # python-xlib Display 非线程安全：所有 X 调用串行化到 loop 线程
-        self._read_done.clear()
-        self._read_result = None
-        self._cmds.put(("read", None))
-        if not self._read_done.wait(0.6):
+        if not self._tool:
             return None
-        return self._read_result
+        if self._tool == "xclip":
+            r = subprocess.run(["xclip", "-selection", "clipboard", "-o"],
+                               capture_output=True, text=True)
+        else:
+            r = subprocess.run(["xsel", "--clipboard", "--output"],
+                               capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else None
 
     def write_text(self, text):
         if self.wayland:
             subprocess.run(["wl-copy"], input=text, text=True, capture_output=True)
             self._last_clip = text
             return
-        self._write_done.clear()
-        self._cmds.put(("write", text))
-        self._write_done.wait(0.3)
+        if not self._tool:
+            return
+        if self._tool == "xclip":
+            subprocess.run(["xclip", "-selection", "clipboard", "-i"],
+                           input=text, text=True, capture_output=True)
+        else:
+            subprocess.run(["xsel", "--clipboard", "--input"],
+                           input=text, text=True, capture_output=True)
+        self._last_clip = text
 
     # ---------- focus ----------
 
     def _frontmost(self):
-        prop = self.root.get_full_property(self.ACTIVE, self._X.AnyPropertyType)
-        if not prop or not prop.value:
+        if self._d is None:
             return "", ""
-        wid = prop.value[0]
         try:
-            w = self.d.create_resource_object("window", wid)
-            cls = w.get_full_property(self.WMCLASS, self._X.AnyPropertyType)
-            name = w.get_full_property(self.NETNAME, self.UTF8)
+            prop = self._root.get_full_property(self._ACTIVE, self._X.AnyPropertyType)
+            if not prop or not prop.value:
+                return "", ""
+            w = self._d.create_resource_object("window", prop.value[0])
+            cls = w.get_full_property(self._WMCLASS, self._X.AnyPropertyType)
+            name = w.get_full_property(self._NETNAME, self._UTF8)
             cls_s = bytes(cls.value).decode("utf-8", "replace").lower() if cls else ""
             name_s = bytes(name.value).decode("utf-8", "replace") if name else ""
             return cls_s, name_s
@@ -186,80 +196,42 @@ class LinuxGuard:
             kinds = "/".join(sorted(set(r.kinds)))
             self.events.appendleft(f"{time.strftime('%H:%M:%S')} masked {r.count} ({kinds})")
 
-    # ---------- event loop ----------
-
-    def _serve_selection(self, ev):
-        from Xlib import X
-        from Xlib.protocol import event
-        if ev.target == self.UTF8 and self._sel_text is not None:
-            ev.requestor.change_property(ev.property, self.UTF8, 8, self._sel_text.encode("utf-8"))
-            prop = ev.property
-        else:
-            prop = X.NONE
-        notify = event.SelectionNotify(
-            window=ev.requestor, selection=ev.selection, target=ev.target,
-            property=prop, time=X.CurrentTime,
-        )
-        notify.display = self.d
-        ev.requestor.send_event(notify)
-        self.d.flush()
+    # ---------- loop ----------
 
     def _loop(self):
         from Xlib import X
         while not self._stop.is_set():
             try:
-                self._loop_once(X)
+                while self._d.pending_events():
+                    ev = self._d.next_event()
+                    if ev.type == X.KeyPress:
+                        threading.Thread(
+                            target=self._paste_worker, args=(ev.detail,), daemon=True
+                        ).start()
             except Exception as e:
-                # python-xlib 对个别 X 错误解析有缺陷；守卫不可因瞬态错误死掉
                 log.warning("X loop error: %s", e)
-            self._stop.wait(0.02)
-
-    def _loop_once(self, X):
-        try:
-            kind, payload = self._cmds.get_nowait()
-        except queue.Empty:
-            kind = None
-        if kind == "write":
-            self._sel_text = payload
-            self.win.set_selection_owner(self.CLIP, X.CurrentTime)
-            self.d.flush()
-            self._write_done.set()
-        elif kind == "read":
-            self.win.convert_selection(self.CLIP, self.UTF8, self.PROP, X.CurrentTime)
-            self.d.flush()
-        elif kind == "key":
-            from Xlib.ext import xtest
-            mod = X.ControlMask if payload == self._kc_v else X.ShiftMask
-            xtest.fake_input(self.d, X.KeyPress, payload, mod)
-            xtest.fake_input(self.d, X.KeyRelease, payload, mod)
-            self.d.flush()
-        while self.d.pending_events():
-            ev = self.d.next_event()
-            if ev.type == X.SelectionNotify:
-                prop = self.win.get_full_property(self.PROP, self.UTF8)
-                self.win.delete_property(self.PROP)
-                self._read_result = bytes(prop.value).decode("utf-8", "replace") if prop else None
-                self._read_done.set()
-            elif ev.type == X.SelectionRequest:
-                self._serve_selection(ev)
-            elif ev.type == X.SelectionClear:
-                self._sel_text = None
-            elif ev.type == X.KeyPress:
-                # grab 已消费按键；worker 决定是否注入，未处理则补发原键
-                threading.Thread(target=self._paste_worker, args=(ev.detail,), daemon=True).start()
-            elif ev.type == self.d.xfixes_event_base + 0:  # XFixesSelectionNotify
-                threading.Thread(target=self._on_copy, daemon=True).start()
-        if not self.wayland:
+            text = self.read_text()
+            if text != self._last_clip:
+                self._last_clip = text
+                self._on_copy()
             cls, name = self._frontmost()
             ai = self._classify(cls, name) if self.mode == "focus" else True
             if ai != self.ai_focused:
                 self.ai_focused = ai
                 if ai:
-                    threading.Thread(target=self._on_copy, daemon=True).start()
+                    self._on_copy()
+            self._stop.wait(0.3)
 
     def _paste_worker(self, detail):
         if not self._handle_paste():
-            self._cmds.put(("key", detail))
+            try:
+                from Xlib.ext import xtest
+                mod = self._X.ControlMask if detail == self._kc_v else self._X.ShiftMask
+                xtest.fake_input(self._d, self._X.KeyPress, detail, mod)
+                xtest.fake_input(self._d, self._X.KeyRelease, detail, mod)
+                self._d.flush()
+            except Exception as e:
+                log.warning("key resend error: %s", e)
 
     def _wayland_loop(self):
         while not self._stop.wait(0.3):
@@ -272,7 +244,7 @@ class LinuxGuard:
         if self.wayland:
             log.warning("Wayland: degraded clipboard-only always-on mode")
             threading.Thread(target=self._wayland_loop, daemon=True).start()
-        else:
+        elif self._tool:
             threading.Thread(target=self._loop, daemon=True).start()
 
     def stop(self):

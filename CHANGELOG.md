@@ -5,8 +5,9 @@
 ### Added
 - macOS backend: NSPasteboard polling, CGEventTap paste hook + Unicode injection
   (Accessibility permission), NSWorkspace focus + AX signature scan, tray app
-- Linux X11 backend: XFixes selection events, XGrabKey paste hook, xdotool
-  injection (clipboard-write fallback), _NET_ACTIVE_WINDOW focus, tray app
+- Linux X11 backend: clipboard I/O via xclip/xsel (robust C selection impl),
+  polling change detection, XGrabKey paste hook, xdotool injection,
+  _NET_ACTIVE_WINDOW focus, tray app
 - Linux Wayland honest degradation: clipboard-only always-on (wl-clipboard)
 - MV3 browser extension: DOM paste masking in web chat inputs (known AI hosts +
   all-sites toggle), JS port of core rules, popup stats/clear, node unit tests

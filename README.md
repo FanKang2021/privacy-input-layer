@@ -54,6 +54,9 @@ Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notific
 | Linux Wayland | degraded | always-on only | no (security model) | no | yes |
 | Web (extension) | DOM paste masking | known AI hosts + all-sites toggle | n/a | n/a | popup |
 
+Linux clipboard I/O delegates to `xclip`/`xsel` and injection to `xdotool`
+(install via your package manager); without them the guard degrades gracefully.
+
 macOS/Linux backends share the same engine (rules, DPAPI-equivalent local mapping,
 i18n) as the Windows reference implementation; CI verifies them on
 macos-latest and ubuntu-latest (Xvfb). Wayland's security model forbids global

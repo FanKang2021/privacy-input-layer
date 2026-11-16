@@ -54,6 +54,9 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 | Linux Wayland | 降级 | 仅常开 | ✗（安全模型禁止） | ✗ | ✓ |
 | Web（扩展） | DOM 粘贴掩码 | 已知 AI _host + 全站开关 | n/a | n/a | popup |
 
+Linux 剪贴板读写委托 `xclip`/`xsel`、注入委托 `xdotool`（包管理器安装）；
+缺失时守卫优雅降级。
+
 macOS/Linux 后端与 Windows 参考实现共享同一引擎（规则/本地映射/i18n）；CI 在
 macos-latest 与 ubuntu-latest（Xvfb）验证。Wayland 安全模型禁止全局输入注入与
 前台查询，守卫如实降级为仅剪贴板常开模式。
