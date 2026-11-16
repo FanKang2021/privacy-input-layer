@@ -86,6 +86,8 @@ def classify_target(process: str, url: str | None, cfg: dict, title: str = "") -
     t = cfg.get("ai_targets", {})
     if process in [p.lower() for p in t.get("processes", [])]:
         return True
+    if process in [p.lower() for p in t.get("learned_processes", [])]:
+        return True
     if process in [b.lower() for b in t.get("browsers", [])]:
         if url:
             host = url_host(url)

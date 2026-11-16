@@ -16,14 +16,23 @@ DEFAULTS = {
         "notify": True,
         "auto_detect": True,
         "paste_hook": True,
+        "paste_injection": True,
         "lazy_restore": True,
     },
     "ai_targets": {
         "processes": [
+            # international desktop clients
             "Qoder CN.exe", "Qoder.exe", "Cursor.exe", "Claude.exe",
             "ChatGPT.exe", "Windsurf.exe", "Trae.exe", "Trae CN.exe",
-            "CodeBuddy.exe", "Comate.exe", "Lingma.exe", "WorkBuddy.exe",
+            "CodeBuddy.exe", "Copilot.exe", "Gemini.exe", "LM Studio.exe",
+            "Jan.exe", "Cherry Studio.exe", "Chatbox.exe", "AnythingLLM.exe",
+            "Msty.exe",
+            # China desktop clients
+            "WorkBuddy.exe", "Comate.exe", "Lingma.exe", "Doubao.exe",
+            "Kimi.exe", "Tongyi.exe", "DeepSeek.exe", "Yuanbao.exe",
+            "ChatGLM.exe", "MiniMax.exe",
         ],
+        "learned_processes": [],
         "browsers": [
             "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe",
             "Tabbit Browser.exe",

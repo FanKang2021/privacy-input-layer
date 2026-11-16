@@ -10,6 +10,7 @@
 
 import ctypes
 import html as _html
+import logging
 import re
 import struct
 import threading
@@ -25,11 +26,14 @@ import win32gui
 
 from ..i18n import t
 from ..engine import TextMasker
+from ..engine import PLACEHOLDER_RE
 from ..engine.image import ImageMasker, ImageOCRUnavailable
 from ..files import SUPPORTED_EXTS, mask_file
 from .dib import dib_to_image, image_to_dib
 
 WM_CLIPBOARDUPDATE = 0x031D
+
+log = logging.getLogger("pilayer.clipboard")
 
 
 class _TextExtractor(HTMLParser):
@@ -68,17 +72,20 @@ _user32.RemoveClipboardFormatListener.restype = ctypes.c_bool
 class ClipboardWatcher:
     def __init__(self, masker: TextMasker, image_masker: ImageMasker,
                  guard_cfg: dict, copies_dir: Path, file_suffix: str = ".masked",
-                 notify=None):
+                 notify=None, on_learn=None, ai_cfg=None):
         self.masker = masker
         self.image_masker = image_masker
         self.cfg = guard_cfg
         self.copies_dir = copies_dir
         self.file_suffix = file_suffix
         self.notify = notify or (lambda title, msg: None)
+        self.on_learn = on_learn
+        self.ai_cfg = ai_cfg
         self.enabled = True
         self.mode = guard_cfg.get("mode", "focus")
         self.ai_focused = False
         self._hdrop_last: list[tuple[str, str]] | None = None
+        self._pending_inject: str | None = None
         self._hwnd = None
         self._suppress_seq = None
         self._thread = None
@@ -247,11 +254,15 @@ class ClipboardWatcher:
     def _on_update(self) -> str | None:
         if not self.enabled:
             return None
+        self._maybe_learn()
         if self.mode == "focus" and not self.ai_focused:
             # 非 AI 前台：只还原，不脱敏
             if self.cfg.get("hdrop_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
                 return self._restore_hdrop()
             if self.cfg.get("text_enabled") and self._text_available():
+                # 注入式下剪贴板不持有我方明文：复制事件不还原，粘贴时注入
+                if self.cfg.get("paste_injection", True):
+                    return None
                 return self._restore_text_current()
             return None
         if self.cfg.get("hdrop_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
@@ -261,6 +272,61 @@ class ClipboardWatcher:
         if self.cfg.get("text_enabled") and self._text_available():
             return self._handle_text()
         return None
+
+    def _maybe_learn(self):
+        """自学习：复制含 >=2 个我方占位符的文本且来源未分类 => 记为 AI 客户端。"""
+        if not self.on_learn or self.ai_cfg is None or not self._text_available():
+            return
+        txt = self._read_text(fast=True)
+        if not txt or len(PLACEHOLDER_RE.findall(txt)) < 2:
+            return
+        from ..focus import classify_target, process_name
+        proc = process_name(win32gui.GetForegroundWindow())
+        if proc and not classify_target(proc, None, self.ai_cfg):
+            self.on_learn(proc)
+
+    def handle_paste(self) -> bool:
+        """粘贴键瞬间：注入式直接把目标文本送进焦点窗口，剪贴板不动。
+
+        返回 True 表示已注入（钩子吞键）；False 放行原粘贴。
+        注入失败（UIPI 提权窗口等）回退剪贴板写入后放行。
+        """
+        if not self.enabled:
+            return False
+        if win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
+            return False
+        if win32clipboard.IsClipboardFormatAvailable(win32con.CF_DIB):
+            return False
+        if not self._text_available():
+            return False
+        if not self.cfg.get("paste_injection", True):
+            self.ensure_for_paste()
+            return False
+        text = self._read_text(fast=True)
+        if not text:
+            return False
+        if self.mode == "focus":
+            target = self.masker.mask(text).text if self.ai_focused else self.masker.restore(text).text
+        elif self.cfg.get("auto_restore") and self.masker.has_placeholder(text):
+            target = self.masker.restore(text).text
+        else:
+            target = self.masker.mask(text).text
+        if target == text:
+            return False
+        # 不在钩子回调内同步 SendInput（会被丢弃），标记后由泵循环延迟注入
+        self._pending_inject = target
+        return True
+
+    def drain_injection(self):
+        target = getattr(self, "_pending_inject", None)
+        if not target:
+            return
+        self._pending_inject = None
+        from .paste_hook import send_unicode
+        ok = send_unicode(target)
+        log.info("paste inject drain ok=%s len=%d", ok, len(target))
+        if not ok:
+            self._write_text(target, fast=True)
 
     def ensure_for_paste(self):
         """粘贴键瞬间的毫秒级补偿：只处理文本，图片/文件走切窗路径。"""

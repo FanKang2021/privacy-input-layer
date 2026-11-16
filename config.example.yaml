@@ -10,13 +10,18 @@ guard:
   notify: true              # tray balloon notifications (also toggleable from tray menu)
   auto_detect: true         # zero-config UI signature detection (model picker / AI disclaimer / chat input)
   paste_hook: true          # Ctrl+V / Shift+Insert instant clipboard compensation (closes switch-to-paste race)
+  paste_injection: true     # inject paste text via SendInput (clipboard never holds our plaintext); falls back to clipboard write on UIPI failure
   lazy_restore: true        # do NOT write plaintext back to clipboard on leaving AI; restore on demand (Ctrl+V / copy event)
 
 # AI client identification for focus mode: zero-config signatures first, these lists as fallback/override
 ai_targets:
   processes: [Qoder CN.exe, Qoder.exe, Cursor.exe, Claude.exe, ChatGPT.exe,
-              Windsurf.exe, Trae.exe, Trae CN.exe, CodeBuddy.exe, Comate.exe,
-              Lingma.exe, WorkBuddy.exe]
+              Windsurf.exe, Trae.exe, Trae CN.exe, CodeBuddy.exe, Copilot.exe,
+              Gemini.exe, LM Studio.exe, Jan.exe, Cherry Studio.exe, Chatbox.exe,
+              AnythingLLM.exe, Msty.exe, WorkBuddy.exe, Comate.exe, Lingma.exe,
+              Doubao.exe, Kimi.exe, Tongyi.exe, DeepSeek.exe, Yuanbao.exe,
+              ChatGLM.exe, MiniMax.exe]
+  learned_processes: []     # auto-learned: copying >=2 placeholders from an unclassified app adds its process here; remove entries to unlearn
   browsers: [chrome.exe, msedge.exe, firefox.exe, brave.exe, Tabbit Browser.exe]
   newtab_chat_browsers: [Tabbit Browser.exe]   # browsers whose new-tab page is a built-in AI chat
   newtab_titles: [新标签页, 新建标签页, New Tab, New tab]

@@ -4,6 +4,7 @@ import ctypes
 import logging
 import os
 import time
+from pathlib import Path
 
 import pystray
 from PIL import Image, ImageDraw
@@ -52,7 +53,7 @@ class Application:
         self.watcher = ClipboardWatcher(
             self.masker, self.image_masker, self.cfg["guard"],
             self.dir / "copies", self.cfg["files"]["suffix"],
-            notify=self.notify,
+            notify=self.notify, on_learn=self._on_learn, ai_cfg=self.cfg,
         )
         self.focus = None
         if self.cfg["guard"].get("mode", "focus") == "focus":
@@ -61,8 +62,17 @@ class Application:
         self.paste_hook = None
         if self.cfg["guard"].get("paste_hook", True):
             from .clipboard.paste_hook import PasteHook
-            self.paste_hook = PasteHook(self.watcher.ensure_for_paste)
+            self.paste_hook = PasteHook(self.watcher.handle_paste, self.watcher.drain_injection)
         self.icon = None
+
+    def _on_learn(self, proc: str):
+        learned = self.cfg.setdefault("ai_targets", {}).setdefault("learned_processes", [])
+        if proc in learned:
+            return
+        learned.append(proc)
+        self._save_config()
+        log.info("learned AI client: %s", proc)
+        self.notify("privacy-input-layer", t("learned", proc=proc))
 
     def _on_focus(self, ai: bool):
         msg = self.watcher.set_focus(ai)
@@ -102,6 +112,40 @@ class Application:
         self._save_config()
         icon.update_menu()
 
+    def _autostart_enabled(self) -> bool:
+        import winreg
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+            ) as k:
+                winreg.QueryValueEx(k, "Pilayer")
+            return True
+        except OSError:
+            return False
+
+    def _set_autostart(self, enable: bool):
+        import sys
+        import winreg
+        exe = Path(sys.executable).with_name("pythonw.exe")
+        cmd = f'"{exe if exe.exists() else sys.executable}" -m pilayer run'
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0, winreg.KEY_SET_VALUE,
+        ) as k:
+            if enable:
+                winreg.SetValueEx(k, "Pilayer", 0, winreg.REG_SZ, cmd)
+            else:
+                try:
+                    winreg.DeleteValue(k, "Pilayer")
+                except FileNotFoundError:
+                    pass
+
+    def _toggle_autostart(self, icon, item):
+        self._set_autostart(not self._autostart_enabled())
+        icon.update_menu()
+
     def _save_config(self):
         import yaml
         (self.dir / "config.yaml").write_text(
@@ -113,6 +157,10 @@ class Application:
             pystray.MenuItem(self._status_text, self._toggle, default=True),
             pystray.MenuItem(self._notify_text, self._toggle_notify),
             pystray.MenuItem(lambda item: t("language"), self._toggle_language),
+            pystray.MenuItem(
+                lambda item: t("autostart_on") if self._autostart_enabled() else t("autostart_off"),
+                self._toggle_autostart,
+            ),
             pystray.MenuItem(lambda item: t("open_config"), lambda: os.startfile(str(self.dir / "config.yaml"))),
             pystray.MenuItem(lambda item: t("open_data"), lambda: os.startfile(str(self.dir))),
             pystray.Menu.SEPARATOR,

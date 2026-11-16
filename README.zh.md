@@ -1,5 +1,9 @@
 # privacy-input-layer
 
+[![CI](https://github.com/FanKang2021/privacy-input-layer/actions/workflows/ci.yml/badge.svg)](https://github.com/FanKang2021/privacy-input-layer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 **AI 隐私输入层**：在内容进入任何 AI 客户端之前完成脱敏。不挑平台、不挑模型——平台自带模型、网页版、桌面端、"网页安装到桌面"的 app 窗口全部通用，因为拦截发生在数据进入客户端**之前**的 OS 输入边界（剪贴板/粘贴/文件上传），而不是网络出站时。
 
 全部本地运行：规则引擎 + 本地 OCR + 本地 sqlite 映射，原文永远不离开你的机器。
@@ -36,7 +40,21 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 
 不想开终端：双击项目根目录的 `start-guard.bat`（无控制台窗口）。
 
-托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、打开配置、打开数据目录、退出。
+托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**开机自启**、打开配置、打开数据目录、退出。
+
+## 支持的客户端
+
+三层检测：**精选名单**（已知桌面壳）+ **零配置 UIA 签名**（未知应用/网站）+ **自学习**（从未分类应用复制 ≥2 个占位符即学习其进程；在 `ai_targets.learned_processes` 删除条目可撤销）。
+
+| 国际 | 国内 |
+|---|---|
+| Qoder / Qoder CN | WorkBuddy |
+| Cursor / Windsurf / Trae | Comate / Lingma |
+| Claude / ChatGPT / Copilot / Gemini | 豆包 / Kimi / 通义 |
+| CodeBuddy | DeepSeek / 元宝 / ChatGLM / MiniMax |
+| LM Studio / Jan / Cherry Studio / Chatbox / AnythingLLM / Msty | |
+
+网页端（ChatGPT/Claude/Gemini/DeepSeek/Kimi… 站点）、内嵌 AI widget（inkeep/Telly 类）、浏览器新标签页 chat 由签名/URL/标题规则覆盖，无需名单。缺客户端？见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ### CLI
 
@@ -62,7 +80,7 @@ pilayer stats                                  # 本地映射统计
 
 **配置名单兜底**（`ai_targets`，可选）：进程白名单、浏览器 URL 域名、页面标题模式、新标签页内置 chat 浏览器（`newtab_chat_browsers`，如 Tabbit）。用于无障碍树暴露不全的 Electron 客户端，或强制指定/排除。
 
-**竞态关闭**：前台切换立即重新评估；300ms 轮询捕捉浏览器内换 tab 与标题变化；低级键盘钩子（`paste_hook: true`）在 Ctrl+V / Shift+Insert 按下瞬间做毫秒级剪贴板补偿，关闭"切窗到粘贴"窗口期（文本）。签名扫描缓存 5s 控制开销。
+**竞态关闭与剪贴板卫生**：前台切换立即重新评估；300ms 轮询捕捉浏览器内换 tab 与标题变化；低级键盘钩子拦截 Ctrl+V / Shift+Insert 并**经 SendInput 注入目标文本**（`paste_injection: true`）——剪贴板从不持有我方明文，关闭 Win+V 历史/云剪贴板暴露。UIPI 受阻（提权窗口）回退剪贴板写入。签名扫描缓存 5s 控制开销。
 
 `guard.mode: always` 可切回全局常开模式。
 
@@ -83,7 +101,7 @@ pilayer stats                                  # 本地映射统计
 3. **防自触发**：写入剪贴板后记录序列号，跳过自己引发的事件，避免脱敏↔还原死循环。
 4. **图片**：剪贴板 DIB → RapidOCR 定位文字行 → 命中规则则整行像素填充。
 5. **文件**：粘贴替换时生成脱敏副本；docx 段落级处理（PII 可能跨 run 拆分），xlsx 仅处理字符串单元格、保留公式。
-6. **粘贴钩子**：WH_KEYBOARD_LL 拦截 Ctrl+V / Shift+Insert，在目标应用读取剪贴板之前同步补偿。
+6. **粘贴钩子 + 注入**：WH_KEYBOARD_LL 拦截 Ctrl+V / Shift+Insert；掩码/还原文本以 Unicode 按键注入，剪贴板不被明文重写（注入失败回退剪贴板写入）。
 
 ## 安全设计
 
@@ -91,7 +109,7 @@ pilayer stats                                  # 本地映射统计
 
 - **静态加密**：映射原文以 Windows DPAPI（当前用户密钥）列级加密存 sqlite，满足 PCI DSS 3.4 / ASVS V8；旧明文行首次启动自动迁移；去重走 sha256 哈希列，不解密全表。
 - **存储限制**：映射按 `store.ttl_days`（默认 30 天）自动过期清理，手动 `pilayer purge`（GDPR art 5(1)(e)）。
-- **懒还原**：离开 AI 客户端**不**主动把明文写回共享剪贴板（剪贴板历史/远桌/恶意软件可读）；按需还原：非 AI 前台 Ctrl+V / Shift+Insert 经粘贴钩子补偿，或在非 AI 处复制占位符文本。代价：非 AI 处菜单/右键粘贴得到占位符；`lazy_restore: false` 可恢复旧的主动还原。
+- **懒还原 + 注入**：离开 AI 客户端**不**主动把明文写回共享剪贴板（剪贴板历史/远桌/恶意软件可读）；按需经粘贴时注入还原，或 `paste_injection: false` 时在非 AI 处复制占位符文本还原。代价：非 AI 处菜单/右键粘贴得到占位符；`lazy_restore: false` 可恢复旧的主动还原。
 - **日志脱敏**：`pilayer.log` 只记进程名与签名种类，不记窗口标题/URL/控件原文（OWASP Logging Cheat Sheet）。
 - **规则基线**：校验位/Luhn、URI userinfo 密码、PGP/PEM 块、厂商令牌族、赋值型密钥（裸值取整行无截断残留）、内网 URL；可选高熵规则（`rules.entropy`，默认关）。过掩为安全方向。
 - **占位符 linkage**：同一原文跨会话复用同占位符，AI 理论上可关联对话；为上下文一致性接受的 trade-off，purge 可重置。

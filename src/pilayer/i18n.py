@@ -24,6 +24,9 @@ STRINGS = {
         "focus_left": "Left AI: ",
         "guard_state_on": "Guard on",
         "guard_state_paused": "Guard paused",
+        "learned": "Learned AI client: {proc}",
+        "autostart_on": "Start with Windows: on",
+        "autostart_off": "Start with Windows: off",
     },
     "zh": {
         "guard_on": "守卫：开启",
@@ -46,6 +49,9 @@ STRINGS = {
         "focus_left": "离开 AI 对话：",
         "guard_state_on": "守卫已开启",
         "guard_state_paused": "守卫已暂停",
+        "learned": "已学习 AI 客户端：{proc}",
+        "autostart_on": "开机自启：开",
+        "autostart_off": "开机自启：关",
     },
 }
 

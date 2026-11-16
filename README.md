@@ -1,5 +1,9 @@
 # privacy-input-layer
 
+[![CI](https://github.com/FanKang2021/privacy-input-layer/actions/workflows/ci.yml/badge.svg)](https://github.com/FanKang2021/privacy-input-layer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 **The privacy input layer for AI.** Mask sensitive text, images and files *before* they enter any AI client — platform-native models, web apps, desktop apps, installed page-as-app windows alike. Interception happens at the OS input boundary (clipboard / paste / file upload), not at the network layer, so it works everywhere regardless of protocol.
 
 100% local: regex rules + local OCR + local sqlite mapping. Your originals never leave your machine.
@@ -36,7 +40,21 @@ pilayer install-sendto        # optional: right-click "Send to -> Masked copy"
 
 No terminal needed: double-click `start-guard.bat` in the project root (no console window).
 
-Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, open config, open data dir, quit.
+Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **Start with Windows**, open config, open data dir, quit.
+
+## Supported clients
+
+Three detection layers: **curated list** (known desktop shells) + **zero-config UIA signatures** (unknown apps/sites) + **self-learning** (copying ≥2 placeholders from an unclassified app learns its process; remove entries under `ai_targets.learned_processes` to unlearn).
+
+| International | China |
+|---|---|
+| Qoder / Qoder CN | WorkBuddy |
+| Cursor / Windsurf / Trae | Comate / Lingma |
+| Claude / ChatGPT / Copilot / Gemini | Doubao / Kimi / Tongyi |
+| CodeBuddy | DeepSeek / Yuanbao / ChatGLM / MiniMax |
+| LM Studio / Jan / Cherry Studio / Chatbox / AnythingLLM / Msty | |
+
+Web clients (ChatGPT/Claude/Gemini/DeepSeek/Kimi/… sites), embedded AI widgets (inkeep/Telly-style) and browser new-tab chats are covered by signatures/URL/title rules without any list. Missing a client? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### CLI
 
@@ -62,7 +80,7 @@ With `guard.mode: focus` the clipboard is masked only while an AI conversation c
 
 **Fallback / override lists** (`ai_targets`, optional): process whitelist, browser URL domains, page-title patterns, and `newtab_chat_browsers` for browsers whose new-tab page is a built-in AI chat (e.g. Tabbit). Useful for Electron clients with sparse accessibility trees, or to force/exclude targets.
 
-**Race closure**: foreground changes re-evaluate immediately; a 300 ms poll catches in-browser tab switches and title changes; a low-level keyboard hook (`paste_hook: true`) performs a millisecond-scale clipboard compensation at the exact moment Ctrl+V / Shift+Insert is pressed, closing the switch-to-paste window for text. Signature scans are cached 5 s to bound overhead.
+**Race closure & clipboard hygiene**: foreground changes re-evaluate immediately; a 300 ms poll catches in-browser tab switches and title changes; a low-level keyboard hook intercepts Ctrl+V / Shift+Insert and **injects the target text via SendInput** (`paste_injection: true`) — the clipboard never holds our plaintext, closing Win+V history / cloud-clipboard exposure. UIPI-blocked (elevated) targets fall back to a clipboard write. Signature scans are cached 5 s to bound overhead.
 
 `guard.mode: always` switches back to global always-on masking.
 
@@ -83,7 +101,7 @@ With `guard.mode: focus` the clipboard is masked only while an AI conversation c
 3. **Self-write suppression**: clipboard sequence numbers skip events caused by our own writes (no mask↔restore loops).
 4. **Images**: clipboard DIB → RapidOCR text lines → rule hit → pixel fill of the whole line.
 5. **Files**: masked copies generated on paste-swap; docx handled per paragraph (PII can span runs), xlsx string cells only (formulas preserved).
-6. **Paste hook**: WH_KEYBOARD_LL intercepts Ctrl+V / Shift+Insert and compensates the clipboard synchronously before the target app reads it.
+6. **Paste hook + injection**: WH_KEYBOARD_LL intercepts Ctrl+V / Shift+Insert; the masked/restored text is injected as Unicode keystrokes so the clipboard is never rewritten with plaintext (clipboard-write fallback on injection failure).
 
 ## Security design
 
@@ -91,7 +109,7 @@ Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Chea
 
 - **Encrypted at rest**: mapping originals are stored DPAPI-encrypted (current-user key) in sqlite — PCI DSS 3.4 / ASVS V8. Legacy plaintext rows are migrated automatically on first start. Dedup uses a sha256 column, never decrypting the table.
 - **Storage limitation**: mappings auto-purge after `store.ttl_days` (default 30); manual `pilayer purge` (GDPR art 5(1)(e)).
-- **Lazy restore**: leaving an AI client does NOT write plaintext back to the shared clipboard (clipboard history / RDP / malware can read it). Restoration happens on demand: Ctrl+V / Shift+Insert via the paste hook, or copying placeholder text outside AI. Trade-off: menu/right-click paste outside AI yields placeholders; set `lazy_restore: false` for the old proactive behavior.
+- **Lazy restore + injection**: leaving an AI client does NOT write plaintext back to the shared clipboard (clipboard history / RDP / malware can read it). Restoration happens on demand via paste-time injection, or copying placeholder text outside AI when `paste_injection: false`. Trade-off: menu/right-click paste outside AI yields placeholders; set `lazy_restore: false` for the old proactive behavior.
 - **Log redaction**: `pilayer.log` records only process names and signature kinds — never window titles, URLs or control text (OWASP Logging Cheat Sheet).
 - **Rule baseline**: checksum/Luhn validation, URI userinfo passwords, PGP/PEM blocks, vendor token families, assignment-style secrets (whole-line bare values, no truncation residue), internal URLs; optional high-entropy rule (`rules.entropy`, off by default). Over-masking is the safe direction.
 - **Placeholder linkage**: the same original reuses the same placeholder across sessions, so an AI could correlate conversations. Accepted trade-off for context consistency; purge resets it.
