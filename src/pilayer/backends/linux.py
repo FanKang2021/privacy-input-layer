@@ -197,9 +197,10 @@ class LinuxGuard:
         else:
             prop = X.NONE
         notify = event.SelectionNotify(
-            time=X.CurrentTime, requestor=ev.requestor,
-            selection=ev.selection, target=ev.target, property=prop,
+            window=ev.requestor, selection=ev.selection, target=ev.target,
+            property=prop, time=X.CurrentTime,
         )
+        notify.display = self.d
         ev.requestor.send_event(notify)
         self.d.flush()
 
