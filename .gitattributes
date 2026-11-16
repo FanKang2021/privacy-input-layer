@@ -1,0 +1,12 @@
+# Normalize line endings repo-wide, overriding core.autocrlf on any platform.
+* text=auto eol=lf
+
+# Windows batch files need CRLF for reliable label/goto parsing.
+*.bat text eol=crlf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pyd binary
+*.dll binary
