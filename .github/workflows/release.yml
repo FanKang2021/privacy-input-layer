@@ -29,9 +29,10 @@ jobs:
           --collect-all rapidocr_onnxruntime --collect-all onnxruntime
           --hidden-import uiautomation --hidden-import comtypes.gen
           --hidden-import pystray --hidden-import docx --hidden-import openpyxl
-          --distpath dist --workpath build --specpath build src/pilayer/__main__.py
+          --distpath dist --workpath build --specpath build packaging/run_guard.py
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          overwrite_files: true
           files: dist/pilayer-guard.exe
