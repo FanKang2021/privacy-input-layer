@@ -57,6 +57,11 @@ Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notific
 Linux clipboard I/O delegates to `xclip`/`xsel` and injection to `xdotool`
 (install via your package manager); without them the guard degrades gracefully.
 
+Release binaries: `pilayer-guard.exe` (Windows), `pilayer-guard-macos-arm64`,
+`pilayer-guard-macos-x64`, `pilayer-guard-linux-x86_64`. macOS binaries are
+unsigned: right-click → Open once (or `xattr -d com.apple.quarantine <file>`);
+Linux: `chmod +x` first. Prefer `pip install -e .` for development.
+
 macOS/Linux backends share the same engine (rules, DPAPI-equivalent local mapping,
 i18n) as the Windows reference implementation; CI verifies them on
 macos-latest and ubuntu-latest (Xvfb). Wayland's security model forbids global

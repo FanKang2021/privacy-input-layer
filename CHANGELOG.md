@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.1
+
+### Added
+- Release binaries for all platforms: pilayer-guard.exe (Windows),
+  pilayer-guard-macos-arm64 / -macos-x64, pilayer-guard-linux-x86_64
+  (ubuntu-22.04 build for wider glibc compatibility)
+- macOS Gatekeeper / Linux exec-permission notes in README/SECURITY
+
+### Notes
+- macOS binaries unsigned: right-click → Open once, or
+  `xattr -d com.apple.quarantine pilayer-guard-macos-*`
+- Linux binary needs xclip/xsel (+xdotool for injection) at runtime
+
 ## 0.4.0
 
 ### Added

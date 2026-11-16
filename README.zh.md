@@ -57,6 +57,11 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 Linux 剪贴板读写委托 `xclip`/`xsel`、注入委托 `xdotool`（包管理器安装）；
 缺失时守卫优雅降级。
 
+发布产物：`pilayer-guard.exe`（Windows）、`pilayer-guard-macos-arm64`、
+`pilayer-guard-macos-x64`、`pilayer-guard-linux-x86_64`。macOS 产物未签名：
+首次右键→打开（或 `xattr -d com.apple.quarantine <文件>`）；Linux 先 `chmod +x`。
+开发建议 `pip install -e .`。
+
 macOS/Linux 后端与 Windows 参考实现共享同一引擎（规则/本地映射/i18n）；CI 在
 macos-latest 与 ubuntu-latest（Xvfb）验证。Wayland 安全模型禁止全局输入注入与
 前台查询，守卫如实降级为仅剪贴板常开模式。
