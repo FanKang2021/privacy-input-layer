@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.14
+
+### Fixed
+- One-time config migration: pre-0.4.11 configs persisted the old
+  paste_injection=true default (per-char restore); migrated to false with a
+  _cfg_version marker; explicit later choices respected
+
 ## 0.4.13
 
 ### Fixed

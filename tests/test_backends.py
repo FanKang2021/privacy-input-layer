@@ -64,3 +64,16 @@ def test_mac_pasteboard_roundtrip():
     g.write_text(r.text)
     assert g.masker.restore(g.read_text()).text == "mac roundtrip 13800138000"
     g.stop()
+
+def test_config_migration_old_injection_default(tmp_path):
+    import yaml
+    from pilayer.config import load_config
+    p = tmp_path / "config.yaml"
+    p.write_text(yaml.safe_dump({"guard": {"paste_injection": True}}), encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg["guard"]["paste_injection"] is False
+    assert cfg["guard"]["_cfg_version"] == 2
+    # 迁移后用户显式改回 true 应被尊重
+    cfg["guard"]["paste_injection"] = True
+    p.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    assert load_config(p)["guard"]["paste_injection"] is True

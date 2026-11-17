@@ -99,8 +99,17 @@ def load_config(path: str | Path | None = None) -> dict:
     if p.exists():
         with open(p, "r", encoding="utf-8") as f:
             user_cfg = yaml.safe_load(f) or {}
-        return _merge(DEFAULTS, user_cfg)
+        cfg = _merge(DEFAULTS, user_cfg)
+        # 一次性迁移：0.4.11 前默认 paste_injection=true 被持久化进旧配置，
+        # 还原方向逐字注入体验差；迁移到新默认 false（显式改过的后续不受影响）
+        if cfg["guard"].get("_cfg_version", 1) < 2:
+            cfg["guard"]["paste_injection"] = False
+            cfg["guard"]["_cfg_version"] = 2
+            with open(p, "w", encoding="utf-8") as f:
+                yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+        return cfg
     cfg = copy.deepcopy(DEFAULTS)
+    cfg["guard"]["_cfg_version"] = 2
     with open(p, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
     return cfg
