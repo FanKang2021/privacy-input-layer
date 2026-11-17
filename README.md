@@ -42,7 +42,9 @@ pilayer install-sendto        # optional: right-click "Send to -> Masked copy"
 
 No terminal needed: double-click `start-guard.bat` in the project root (no console window).
 
-Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **Start with Windows**, open config, open data dir, quit.
+Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **mode focus/always**, **Start with Windows**, **Recent masks** (audit, no secrets), **Restore clipboard now**, open config, open data dir, quit.
+
+Prebuilt binaries: see [Releases](https://github.com/FanKang2021/privacy-input-layer/releases) (Windows / macOS-arm64 / Linux-x86_64).
 
 ## Platform support
 
@@ -52,7 +54,7 @@ Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notific
 | macOS | yes | yes (bundle ID + AX scan) | yes (needs Accessibility permission) | roadmap | yes |
 | Linux X11 | yes | yes (WM_CLASS / title) | yes (xdotool) | roadmap | yes (system tray required) |
 | Linux Wayland | degraded | always-on only | no (security model) | no | yes |
-| Web (extension) | DOM paste masking | known AI hosts + all-sites toggle | n/a | n/a | popup |
+| Web (extension) | DOM paste masking | all sites by default (popup toggle) | n/a | n/a | popup |
 
 Linux clipboard I/O delegates to `xclip`/`xsel` and injection to `xdotool`
 (install via your package manager); without them the guard degrades gracefully.
@@ -71,11 +73,12 @@ clipboard-only always-on there.
 
 ### Browser extension (MV3)
 
-Load `extension/` unpacked (chrome://extensions → Developer mode → Load unpacked).
-It masks secrets at paste time inside web chat inputs (known AI hosts by default,
-all-sites toggle in popup), complementing the OS layer for widgets without
-accessibility signatures. Mappings stay in `chrome.storage.local`; the OS guard
-restores placeholders when you copy replies outside AI.
+Load `extension/` unpacked (chrome://extensions → Developer mode → Load unpacked;
+reload after updates). It masks secrets at paste time inside web chat inputs on
+**all sites by default** (toggle in popup), complementing the OS layer for
+widgets without accessibility signatures (contenteditable sidebars,
+internal-scheme new-tab pages). Mappings stay in `chrome.storage.local`; the OS
+guard restores placeholders when you copy replies outside AI.
 
 ## Supported clients
 
@@ -115,7 +118,10 @@ With `guard.mode: focus` the clipboard is masked only while an AI conversation c
 
 **Fallback / override lists** (`ai_targets`, optional): process whitelist, browser URL domains, page-title patterns, and `newtab_chat_browsers` for browsers whose new-tab page is a built-in AI chat (e.g. Tabbit). Useful for Electron clients with sparse accessibility trees, or to force/exclude targets.
 
-**Race closure & clipboard hygiene**: foreground changes re-evaluate immediately; a 300 ms poll catches in-browser tab switches and title changes; a low-level keyboard hook intercepts Ctrl+V / Shift+Insert and **injects the target text via SendInput** (`paste_injection: true`) — the clipboard never holds our plaintext, closing Win+V history / cloud-clipboard exposure. UIPI-blocked (elevated) targets fall back to a clipboard write. Signature scans are cached 5 s to bound overhead.
+**Race closure & clipboard hygiene**: foreground changes re-evaluate immediately; a 300 ms poll catches in-browser tab switches and title changes. A low-level keyboard hook intercepts Ctrl+V / Shift+Insert (swallowing the orphan keyup and re-sending adaptively so host modifier latches never break):
+- **Mask direction** (into AI): masked text goes to the clipboard and the real paste is re-sent, **chunked** (`paste_chunk_size`, default 400 chars / `paste_chunk_delay_ms` 40 ms) to amortize host rendering of huge inputs; clipboard holds only masked text.
+- **Restore direction** (outside AI): plaintext is injected via SendInput after physical modifiers release, so it never touches the clipboard / Win+V history / cloud sync (`paste_injection: true`; `false` = one-shot clipboard path with that trade-off).
+Signature scans are cached 5 s to bound overhead.
 
 `guard.mode: always` switches back to global always-on masking.
 
@@ -123,10 +129,11 @@ With `guard.mode: focus` the clipboard is masked only while an AI conversation c
 
 `%APPDATA%/pilayer/config.yaml` (auto-created; template in [config.example.yaml](config.example.yaml)):
 
-- `guard.*`: mode, text/image/hdrop switches, auto_restore, notify, auto_detect, paste_hook
+- `guard.*`: mode, text/image/hdrop switches, auto_restore, notify, auto_detect, paste_hook, paste_injection, paste_chunk_size, paste_chunk_delay_ms, lazy_restore
 - `rules.*`: per-rule switches + `custom_keywords` (names, project codenames, …)
 - `ai_targets.*`: fallback identification lists
 - `image.min_score` / `image.fill`: OCR threshold and mask color
+- `store.ttl_days`: mapping expiry
 - `ui.language`: `en` / `zh` for tray menu and notifications
 
 ## How it works
@@ -136,7 +143,7 @@ With `guard.mode: focus` the clipboard is masked only while an AI conversation c
 3. **Self-write suppression**: clipboard sequence numbers skip events caused by our own writes (no mask↔restore loops).
 4. **Images**: clipboard DIB → RapidOCR text lines → rule hit → pixel fill of the whole line.
 5. **Files**: masked copies generated on paste-swap; docx handled per paragraph (PII can span runs), xlsx string cells only (formulas preserved).
-6. **Paste hook + injection**: WH_KEYBOARD_LL intercepts Ctrl+V / Shift+Insert; the masked/restored text is injected as Unicode keystrokes so the clipboard is never rewritten with plaintext (clipboard-write fallback on injection failure).
+6. **Paste hook**: WH_KEYBOARD_LL intercepts Ctrl+V / Shift+Insert, swallows the orphan keyup and re-sends adaptively (physical modifier held → main key only). Mask direction pastes masked clipboard text in chunks; restore direction injects plaintext via SendInput after modifiers release (clipboard-write fallback on injection failure).
 
 ## Security design
 
@@ -152,7 +159,8 @@ Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Chea
 
 ## Known limitations
 
-- **Windows only** (macOS / Linux on the roadmap).
+- **Platform caveats**: Linux Wayland degrades to clipboard-only always-on (compositor forbids global injection/foreground queries); Intel macOS has no prebuilt (use pip); macOS binaries unsigned (Gatekeeper note above).
+- Large one-shot pastes can stutter in some hosts (their rendering cost); chunked paste amortizes it — tune `paste_chunk_size` if needed.
 - Image masking granularity is the OCR text line (over-masks neighboring non-sensitive text on the same line — safer direction).
 - Rewriting the clipboard strips rich-text formats (HTML/RTF) to prevent clients reading originals from alternate clipboard formats.
 - Image OCR on window-switch takes hundreds of ms; an extremely fast image paste inside that window can slip through (text is covered by the paste hook).
@@ -166,9 +174,10 @@ Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Chea
 
 - [ ] Local NER for names / addresses / organizations
 - [ ] PDF masked copies
-- [ ] macOS (NSPasteboard monitoring) / Linux
-- [ ] Browser extension for in-page input interception (covers widgets with no accessibility signatures)
-- [ ] Mapping expiry / cleanup policy
+- [ ] Code signing (SmartScreen / corporate EDR allowlisting)
+- [ ] Opt-in local LLM pre-send review (semantic secrets)
+- [ ] Extension store publishing; Intel macOS prebuilt
+- [x] macOS / Linux backends, MV3 extension, mapping expiry (shipped v0.4.x)
 
 ## Privacy
 

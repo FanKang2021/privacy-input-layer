@@ -54,5 +54,5 @@ acknowledge within 72 hours and to publish a fix + advisory for confirmed issues
 
 | Version | Supported |
 |---|---|
-| 0.2.x | yes |
-| < 0.2 | no |
+| 0.4.x | yes |
+| < 0.4 | no |

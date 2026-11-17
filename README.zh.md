@@ -42,7 +42,9 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 
 不想开终端：双击项目根目录的 `start-guard.bat`（无控制台窗口）。
 
-托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**开机自启**、打开配置、打开数据目录、退出。
+托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**模式 focus/always**、**开机自启**、**最近脱敏**（审计，不含原文）、**立即还原剪贴板**、打开配置、打开数据目录、退出。
+
+预构建产物见 [Releases](https://github.com/FanKang2021/privacy-input-layer/releases)（Windows / macOS-arm64 / Linux-x86_64）。
 
 ## 平台支持
 
@@ -52,7 +54,7 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 | macOS | ✓ | ✓（bundle ID + AX 扫描） | ✓（需辅助功能权限） | 路线图 | ✓ |
 | Linux X11 | ✓ | ✓（WM_CLASS/标题） | ✓（xdotool） | 路线图 | ✓（需系统托盘） |
 | Linux Wayland | 降级 | 仅常开 | ✗（安全模型禁止） | ✗ | ✓ |
-| Web（扩展） | DOM 粘贴掩码 | 已知 AI _host + 全站开关 | n/a | n/a | popup |
+| Web（扩展） | DOM 粘贴掩码 | 默认全站（popup 可关） | n/a | n/a | popup |
 
 Linux 剪贴板读写委托 `xclip`/`xsel`、注入委托 `xdotool`（包管理器安装）；
 缺失时守卫优雅降级。
@@ -68,10 +70,10 @@ macos-latest 与 ubuntu-latest（Xvfb）验证。Wayland 安全模型禁止全�
 
 ### 浏览器扩展（MV3）
 
-chrome://extensions → 开发者模式 → 加载已解压的扩展程序 → 选 `extension/`。
-在网页聊天输入框粘贴时即时掩码（默认已知 AI _host，popup 可开全站），补 OS 层
-对无无障碍特征 widget 的盲区。映射存 `chrome.storage.local`；在 AI 外复制回复时
-由 OS 守卫还原占位符。
+chrome://extensions → 开发者模式 → 加载已解压的扩展程序 → 选 `extension/`（更新后需点重新加载）。
+**默认全站**在网页聊天输入框粘贴时即时掩码（popup 可关），补 OS 层对无无障碍特征
+widget（contenteditable sidebar、内部 scheme 新标签页）的盲区。映射存
+`chrome.storage.local`；在 AI 外复制回复时由 OS 守卫还原占位符。
 
 ## 支持的客户端
 
@@ -111,7 +113,10 @@ pilayer stats                                  # 本地映射统计
 
 **配置名单兜底**（`ai_targets`，可选）：进程白名单、浏览器 URL 域名、页面标题模式、新标签页内置 chat 浏览器（`newtab_chat_browsers`，如 Tabbit）。用于无障碍树暴露不全的 Electron 客户端，或强制指定/排除。
 
-**竞态关闭与剪贴板卫生**：前台切换立即重新评估；300ms 轮询捕捉浏览器内换 tab 与标题变化；低级键盘钩子拦截 Ctrl+V / Shift+Insert 并**经 SendInput 注入目标文本**（`paste_injection: true`）——剪贴板从不持有我方明文，关闭 Win+V 历史/云剪贴板暴露。UIPI 受阻（提权窗口）回退剪贴板写入。签名扫描缓存 5s 控制开销。
+**竞态关闭与剪贴板卫生**：前台切换立即重新评估；300ms 轮询捕捉浏览器内换 tab 与标题变化。低级键盘钩子拦截 Ctrl+V / Shift+Insert（吞掉孤儿 keyup、自适应补发，宿主修饰键 latch 不紊乱）：
+- **掩码方向**（进 AI）：掩码文本上剪贴板并补发真实粘贴，**分块**（`paste_chunk_size` 默认 400 字 / `paste_chunk_delay_ms` 40ms）摊销宿主大输入渲染成本；剪贴板只持有掩码态。
+- **还原方向**（出 AI）：物理修饰键释放后经 SendInput 注入明文，明文不进剪贴板 / Win+V 历史 / 云同步（`paste_injection: true`；`false` = 一次性剪贴板路径，承担该 trade-off）。
+签名扫描缓存 5s 控制开销。
 
 `guard.mode: always` 可切回全局常开模式。
 
@@ -119,10 +124,11 @@ pilayer stats                                  # 本地映射统计
 
 `%APPDATA%/pilayer/config.yaml`（首次运行自动生成，模板见 [config.example.yaml](config.example.yaml)）：
 
-- `guard.*`：mode、文本/图片/文件开关、auto_restore、notify、auto_detect、paste_hook
+- `guard.*`：mode、文本/图片/文件开关、auto_restore、notify、auto_detect、paste_hook、paste_injection、paste_chunk_size、paste_chunk_delay_ms、lazy_restore
 - `rules.*`：各规则开关 + `custom_keywords`（人名、项目代号等）
 - `ai_targets.*`：兜底识别名单
 - `image.min_score` / `image.fill`：OCR 置信度阈值与打码颜色
+- `store.ttl_days`：映射过期
 - `ui.language`：托盘菜单与通知语言 `en` / `zh`
 
 ## 工作原理
@@ -132,7 +138,7 @@ pilayer stats                                  # 本地映射统计
 3. **防自触发**：写入剪贴板后记录序列号，跳过自己引发的事件，避免脱敏↔还原死循环。
 4. **图片**：剪贴板 DIB → RapidOCR 定位文字行 → 命中规则则整行像素填充。
 5. **文件**：粘贴替换时生成脱敏副本；docx 段落级处理（PII 可能跨 run 拆分），xlsx 仅处理字符串单元格、保留公式。
-6. **粘贴钩子 + 注入**：WH_KEYBOARD_LL 拦截 Ctrl+V / Shift+Insert；掩码/还原文本以 Unicode 按键注入，剪贴板不被明文重写（注入失败回退剪贴板写入）。
+6. **粘贴钩子**：WH_KEYBOARD_LL 拦截 Ctrl+V / Shift+Insert，吞孤儿 keyup、自适应补发（物理修饰键仍按住时只补发主键）。掩码方向分块粘贴掩码态剪贴板文本；还原方向在修饰键释放后 SendInput 注入明文（注入失败回退剪贴板写入）。
 
 ## 安全设计
 
@@ -148,7 +154,8 @@ pilayer stats                                  # 本地映射统计
 
 ## 已知限制
 
-- **仅 Windows**（macOS / Linux 在路线图）。
+- **平台注意**：Linux Wayland 降级为仅剪贴板常开（compositor 禁止全局注入/前台查询）；Intel Mac 无预构建（用 pip）；macOS 产物未签名（见上文 Gatekeeper 说明）。
+- 部分宿主一次性粘贴大文本会卡顿（宿主渲染成本）；分块粘贴可摊销——必要时调 `paste_chunk_size`。
 - 图片打码粒度为 OCR 文字行，会连带遮盖同行非敏感文字（宁多勿漏）。
 - 触发脱敏重写剪贴板时会清空富文本格式（HTML/RTF），防止客户端从其他格式读到原文。
 - 切窗瞬间图片 OCR 需几百毫秒，极快图片粘贴理论上存在竞态（文本已被粘贴钩子覆盖）。
@@ -162,9 +169,10 @@ pilayer stats                                  # 本地映射统计
 
 - [ ] 本地 NER 识别人名 / 地址 / 机构名
 - [ ] pdf 脱敏副本
-- [ ] macOS（NSPasteboard 监听）/ Linux
-- [ ] 浏览器扩展：网页输入框直接拦截（覆盖无无障碍特征的 widget）
-- [ ] 映射过期与清理策略
+- [ ] 代码签名（SmartScreen / 企业 EDR 白名单）
+- [ ] opt-in 本地 LLM 送前复核（语义秘密）
+- [ ] 扩展商店上架；Intel Mac 预构建
+- [x] macOS / Linux 后端、MV3 扩展、映射过期（v0.4.x 已交付）
 
 ## 隐私声明
 

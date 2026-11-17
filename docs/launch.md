@@ -28,7 +28,7 @@ local-only, keyboard-paste injection, menu-paste outside AI yields placeholders.
 > - No network, no telemetry, MIT.
 >
 > Repo: https://github.com/FanKang2021/privacy-input-layer
-> Demo GIF in README. 82 tests + CI on windows-latest.
+> Demo GIF in README. 88 tests + CI on windows / macos / ubuntu(Xvfb) + node.
 >
 > Known limits: Windows only; image OCR races sub-second pastes after window
 > switches; unsigned exe may trip EDR (allowlist guidance in SECURITY.md).
