@@ -84,7 +84,7 @@ def test_recent_submenu_dynamic():
     a = Application()
     a.watcher.events.appendleft("12:00:00 masked 2 (SECRET)")
     menu = a._menu()
-    recent = [i for i in menu.items if callable(i.action) and i.action.__name__ == "_recent_menu"][0]
-    sub = recent.action()
+    recent = [i for i in menu.items if callable(i._action) and i._action.__name__ == "_recent_menu"][0]
+    sub = recent._action()
     texts = [(i.text(None) if callable(i.text) else i.text) for i in sub.items]
     assert any("masked 2" in (t if isinstance(t, str) else "") for t in texts)
