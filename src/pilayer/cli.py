@@ -1,12 +1,15 @@
 """CLI: pilayer run / mask-text / restore-text / mask-file / restore-file / stats / install-sendto."""
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
 from .config import app_dir, load_config
 from .engine import MappingStore, TextMasker
 from .files import mask_file, restore_file
+
+log = logging.getLogger("pilayer.cli")
 
 
 def _build_masker() -> TextMasker:
@@ -55,6 +58,11 @@ def main(argv=None):
     sub.add_parser("install-sendto", help='install right-click "Send to -> Masked copy"')
     args = parser.parse_args(argv)
     cmd = args.cmd or "run"
+    if cmd != "run":
+        logging.basicConfig(
+            filename=str(app_dir() / "pilayer.log"), level=logging.INFO,
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        )
 
     if cmd == "run":
         import sys as _sys
@@ -84,9 +92,11 @@ def main(argv=None):
         print(f"restored {r.count}, unmapped {len(r.missing)}", file=sys.stderr)
     elif cmd == "mask-file":
         r = mask_file(args.path, masker, dst=args.dst)
+        log.info("cli mask-file name=%s count=%d dst=%s", Path(args.path).name, r.count, r.dst)
         print(f"{r.dst} (masked {r.count} item(s))")
     elif cmd == "restore-file":
         r = restore_file(args.path, masker, dst=args.dst)
+        log.info("cli restore-file name=%s count=%d", Path(args.path).name, r.count)
         print(f"{r.dst} (restored {r.count} item(s))")
     elif cmd == "stats":
         s = masker.store.stats()

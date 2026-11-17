@@ -20,6 +20,7 @@ DEFAULTS = {
         "paste_chunk_size": 400,
         "paste_chunk_delay_ms": 40,
         "lazy_restore": True,
+        "drag_warn": True,
         "update_check": False,
     },
     "ai_targets": {

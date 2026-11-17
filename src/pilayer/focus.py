@@ -21,6 +21,7 @@ if sys.platform == "win32":
 log = logging.getLogger("pilayer.focus")
 
 EVENT_SYSTEM_FOREGROUND = 0x0003
+EVENT_SYSTEM_DRAGDROPSTART = 0x000D
 WINEVENT_OUTOFCONTEXT = 0x0000
 
 if sys.platform == "win32":
@@ -187,13 +188,16 @@ def ai_ui_signature(hwnd) -> str | None:
 
 
 class ForegroundWatcher:
-    def __init__(self, cfg: dict, on_change):
+    def __init__(self, cfg: dict, on_change, on_drag=None):
         self.cfg = cfg
         self.on_change = on_change
+        self.on_drag = on_drag
         self._stop = threading.Event()
         self._state = None
         self._hook = None
         self._proc = None
+        self._drag_hook = None
+        self._drag_proc = None
         self._threads = []
         self._heur_cache = None
 
@@ -222,6 +226,13 @@ class ForegroundWatcher:
                 None, self._proc, 0, 0, WINEVENT_OUTOFCONTEXT,
             )
             log.info("focus hook installed: %s (err=%s)", self._hook, _kernel32.GetLastError())
+            if self.on_drag:
+                self._drag_proc = WinEventProc(self._on_drag_event)
+                self._drag_hook = _user32.SetWinEventHook(
+                    EVENT_SYSTEM_DRAGDROPSTART, EVENT_SYSTEM_DRAGDROPSTART,
+                    None, self._drag_proc, 0, 0, WINEVENT_OUTOFCONTEXT,
+                )
+                log.info("drag-start hook installed: %s", self._drag_hook)
             while not self._stop.is_set():
                 win32gui.PumpWaitingMessages()
                 self._stop.wait(0.05)
@@ -229,6 +240,9 @@ class ForegroundWatcher:
             if self._hook:
                 _user32.UnhookWinEvent(self._hook)
                 self._hook = None
+            if self._drag_hook:
+                _user32.UnhookWinEvent(self._drag_hook)
+                self._drag_hook = None
             pythoncom.CoUninitialize()
 
     def _poll(self):
@@ -252,6 +266,13 @@ class ForegroundWatcher:
             self._evaluate(hwnd)
         except Exception as e:
             log.warning("focus event error: %s", e)
+
+    def _on_drag_event(self, hook, event, hwnd, id_object, id_child, thread, ms):
+        # OLE 拖拽起点：无法拦截数据对象，但可在风险动作瞬间警告（拖拽不经过剪贴板）
+        try:
+            self.on_drag()
+        except Exception as e:
+            log.warning("drag event error: %s", e)
 
     def _is_newtab_chat(self, proc: str, url: str | None, title: str) -> bool:
         t = self.cfg.get("ai_targets", {})

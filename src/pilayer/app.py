@@ -61,7 +61,7 @@ class Application:
         self.focus = None
         if self.cfg["guard"].get("mode", "focus") == "focus":
             from .focus import ForegroundWatcher
-            self.focus = ForegroundWatcher(self.cfg, self._on_focus)
+            self.focus = ForegroundWatcher(self.cfg, self._on_focus, on_drag=self._on_drag)
         self.paste_hook = None
         if self.cfg["guard"].get("paste_hook", True):
             from .clipboard.paste_hook import PasteHook
@@ -85,6 +85,16 @@ class Application:
         if msg:
             prefix = t("focus_ai") if ai else t("focus_left")
             self.notify("privacy-input-layer", prefix + msg)
+
+    def _on_drag(self):
+        if not self.cfg["guard"].get("drag_warn", True) or not self.watcher.enabled:
+            return
+        now = time.time()
+        if now - getattr(self, "_last_drag_warn", 0) < 60:
+            return
+        self._last_drag_warn = now
+        log.info("drag-start warning issued")
+        self.notify("privacy-input-layer", t("drag_warn"))
 
     def notify(self, title: str, msg: str):
         if self.cfg["guard"].get("notify") and self.icon:
@@ -254,7 +264,7 @@ class Application:
         if new == "focus":
             if not self.focus:
                 from .focus import ForegroundWatcher
-                self.focus = ForegroundWatcher(self.cfg, self._on_focus)
+                self.focus = ForegroundWatcher(self.cfg, self._on_focus, on_drag=self._on_drag)
             self.focus.start()
         else:
             if self.focus:

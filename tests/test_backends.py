@@ -108,3 +108,23 @@ def test_events_hook_fires(tmp_path):
     )
     w.events.appendleft("x")
     assert calls == [1]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 winevent only")
+def test_drag_start_hook_warns():
+    from pilayer.focus import ForegroundWatcher
+    calls = []
+    w = ForegroundWatcher({}, lambda ai: None, on_drag=lambda: calls.append(1))
+    w._on_drag_event(None, 0x000D, None, 0, 0, 0, 0)
+    assert calls == [1]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 tray only")
+def test_drag_warn_throttled():
+    from pilayer.app import Application
+    a = Application()
+    msgs = []
+    a.notify = lambda title, msg: msgs.append(msg)
+    a._on_drag()
+    a._on_drag()
+    assert len(msgs) == 1

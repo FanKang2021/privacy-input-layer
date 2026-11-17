@@ -42,6 +42,7 @@ STRINGS = {
         "mask_files_none": "No supported file masked",
         "sendto_install": "Install SendTo entry (right-click)",
         "sendto_done": "SendTo installed: {path}",
+        "drag_warn": "Drag & drop bypasses the guard (OLE). Files: right-click > Send to > Masked copy, then drag the copy. Text: use Ctrl+V.",
     },
     "zh": {
         "guard_on": "守卫：开启",
@@ -82,6 +83,7 @@ STRINGS = {
         "mask_files_none": "未脱敏任何文件",
         "sendto_install": "安装右键「发送到」入口",
         "sendto_done": "已安装发送到入口：{path}",
+        "drag_warn": "拖拽不经过守卫（OLE 通道）。文件请右键→发送到→Masked copy 后拖副本；文本请用 Ctrl+V。",
     },
 }
 

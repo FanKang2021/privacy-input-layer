@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.5
+
+### Added
+- Drag-start warning: EVENT_SYSTEM_DRAGDROPSTART balloon at the moment an OLE
+  drag begins (60s throttle, `guard.drag_warn`) — the uninterceptable drag
+  bypass becomes a warned bypass instead of a silent leak
+- CLI mask-file/restore-file log name/count/dst to pilayer.log so SendTo
+  invocations are diagnosable
+
 ## 0.5.4
 
 ### Fixed
