@@ -166,7 +166,7 @@ Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Chea
 - Image masking granularity is the OCR text line (over-masks neighboring non-sensitive text on the same line — safer direction).
 - Rewriting the clipboard strips rich-text formats (HTML/RTF) to prevent clients reading originals from alternate clipboard formats.
 - Image OCR on window-switch takes hundreds of ms; an extremely fast image paste inside that window can slip through (text is covered by the paste hook).
-- Files read from disk after upload cannot be intercepted transparently in user mode — hence the masked-copy step.
+- Files read from disk after upload cannot be intercepted transparently in user mode — hence the masked-copy step. File **paste** (Ctrl+V of a file copied in Explorer) is swapped to masked copies synchronously at the paste instant; **drag & drop** uses OLE, never the OS clipboard, and cannot be intercepted — use tray "Mask file…" and drag the masked copy instead.
 - Image/PDF masking is irreversible (pixels destroyed); `restore-file` on them errors by design. PDF masking renders pages to images (text layer lost, scanned+text PDFs covered uniformly).
 - Legacy binary `.doc/.xls/.ppt` unsupported (unreliable binary parsing); save as `.docx/.xlsx/.pptx`.
 - Linux clipboard images unsupported (X11 image selection protocol); image files and PDF still mask via CLI/SendTo.
@@ -178,7 +178,7 @@ Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Chea
 ## Roadmap
 
 - [ ] Local NER for names / addresses / organizations
-- [ ] PDF masked copies
+- [x] PDF masked copies (shipped v0.5.0)
 - [ ] Code signing (SmartScreen / corporate EDR allowlisting)
 - [ ] Opt-in local LLM pre-send review (semantic secrets)
 - [ ] Extension store publishing; Intel macOS prebuilt

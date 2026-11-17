@@ -162,6 +162,42 @@ class Application:
         msg = self.watcher._restore_text_current()
         self.notify("privacy-input-layer", msg or t("nothing_restore"))
 
+    def _mask_files(self, icon, item):
+        threading.Thread(target=self._mask_files_work, daemon=True).start()
+
+    def _mask_files_work(self):
+        """拖拽走 OLE 不经过剪贴板，无法透明拦截；提供手动脱敏副本出口。"""
+        import win32con
+        import win32gui
+        from .files import SUPPORTED_EXTS, UnsupportedFile, mask_file
+        filt = "Supported\0*" + ";*".join(sorted(SUPPORTED_EXTS)) + "\0All files\0*.*\0"
+        try:
+            res = win32gui.GetOpenFileName(
+                Title=t("mask_files"), Filter=filt,
+                Flags=win32con.OFN_EXPLORER | win32con.OFN_FILEMUSTEXIST | win32con.OFN_NOCHANGEDIR,
+            )
+        except Exception as e:
+            log.warning("mask files dialog: %s", e)
+            return
+        raw = res[0] if isinstance(res, tuple) else res
+        if not raw:
+            return
+        src = Path(raw)
+        self.watcher.copies_dir.mkdir(parents=True, exist_ok=True)
+        dst = self.watcher.copies_dir / (src.stem + self.watcher.file_suffix + src.suffix)
+        try:
+            mask_file(src, self.masker, self.watcher.file_suffix, dst=dst)
+        except UnsupportedFile:
+            self.notify("privacy-input-layer", t("mask_files_none"))
+            return
+        except Exception as e:
+            log.warning("mask %s: %s", src, e)
+            self.notify("privacy-input-layer", t("mask_files_none"))
+            return
+        self.watcher.events.appendleft(f"{time.strftime('%H:%M:%S')} files masked 1 (manual)")
+        self.notify("privacy-input-layer", t("mask_files_done", n=1, dir=self.watcher.copies_dir))
+        os.startfile(str(self.watcher.copies_dir))
+
     def _toggle_mode(self, icon, item):
         cur = self.cfg["guard"].get("mode", "focus")
         new = "always" if cur == "focus" else "focus"
@@ -200,6 +236,7 @@ class Application:
             ),
             pystray.MenuItem(lambda item: t("recent"), self._recent_menu),
             pystray.MenuItem(lambda item: t("restore_now"), self._restore_now),
+            pystray.MenuItem(lambda item: t("mask_files"), self._mask_files),
             pystray.MenuItem(
                 lambda item: t("autostart_on") if self._autostart_enabled() else t("autostart_off"),
                 self._toggle_autostart,

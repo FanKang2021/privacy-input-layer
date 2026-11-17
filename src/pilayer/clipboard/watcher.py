@@ -331,6 +331,7 @@ class ClipboardWatcher:
         if not self.enabled:
             return False
         if win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
+            self._ensure_hdrop_for_paste()
             return False
         if win32clipboard.IsClipboardFormatAvailable(win32con.CF_DIB):
             return False
@@ -442,6 +443,16 @@ class ClipboardWatcher:
         else:
             self._mask_text_current(fast=True)
 
+    def _ensure_hdrop_for_paste(self):
+        """粘贴瞬间同步替换：切窗替换与粘贴键存在竞态窗口，
+        文件副本必须在补发键之前完成（worker 线程执行，不占 LL 钩子）。"""
+        if not self.cfg.get("hdrop_enabled"):
+            return
+        if self.mode == "focus" and not self.ai_focused:
+            self._restore_hdrop()
+        else:
+            self._handle_hdrop()
+
     def _mask_text_current(self, fast: bool = False) -> str | None:
         text = self._read_text(fast=fast)
         if not text or not text.strip():
@@ -512,7 +523,8 @@ class ClipboardWatcher:
         pairs = []
         for p in paths:
             src = Path(p)
-            if src.suffix.lower() in SUPPORTED_EXTS and src.exists():
+            if (src.suffix.lower() in SUPPORTED_EXTS and src.exists()
+                    and not src.stem.endswith(self.file_suffix)):
                 dst = self.copies_dir / (src.stem + self.file_suffix + src.suffix)
                 try:
                     mask_file(src, self.masker, self.file_suffix, dst=dst)

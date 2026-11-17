@@ -37,6 +37,9 @@ STRINGS = {
         "recent_empty": "(no events yet)",
         "restore_now": "Restore clipboard now",
         "nothing_restore": "No placeholders on clipboard",
+        "mask_files": "Mask file…",
+        "mask_files_done": "Masked {n} file(s) to {dir} - drag the copies",
+        "mask_files_none": "No supported file masked",
     },
     "zh": {
         "guard_on": "守卫：开启",
@@ -72,6 +75,9 @@ STRINGS = {
         "recent_empty": "（暂无事件）",
         "restore_now": "立即还原剪贴板",
         "nothing_restore": "剪贴板无占位符",
+        "mask_files": "脱敏文件…",
+        "mask_files_done": "已脱敏 {n} 个文件 → {dir}（拖拽副本即可）",
+        "mask_files_none": "未脱敏任何文件",
     },
 }
 

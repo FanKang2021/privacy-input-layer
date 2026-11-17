@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.2
+
+### Fixed
+- File paste race: Ctrl+V was resent before the window-switch HDROP swap
+  finished (~300ms), so fast pastes attached the ORIGINAL file. handle_paste
+  now swaps file copies synchronously in the paste worker before the resend;
+  already-masked copies are never double-masked
+
+### Added
+- Tray "Mask file…": manual masked-copy picker for drag & drop, which uses OLE
+  and never touches the OS clipboard (documented in Known limitations)
+
 ## 0.5.1
 
 ### Fixed
