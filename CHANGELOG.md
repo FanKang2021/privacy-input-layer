@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.7
+
+### Fixed
+- System-wide mouse stutter introduced in 0.5.6: the WH_MOUSE_LL hook shared
+  the focus pump thread (50ms pump gaps + heavy UIA work delayed hook
+  callbacks). Mouse hook now runs on a dedicated thread with blocking
+  GetMessage (instant dispatch); `guard.drag_warn: false` skips the hook
+  entirely
+
 ## 0.5.6
 
 ### Fixed

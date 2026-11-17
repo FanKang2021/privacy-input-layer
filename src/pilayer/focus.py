@@ -15,6 +15,8 @@ import sys
 
 if sys.platform == "win32":
     import pythoncom
+    import win32api
+    import win32con
     import win32gui
     import win32process
 
@@ -228,6 +230,7 @@ class ForegroundWatcher:
         self._drag_proc = None
         self._mouse_hook = None
         self._mouse_proc = None
+        self._mouse_tid = None
         self._drag_track = None
         self._drag_candidate = None
         self._threads = []
@@ -237,7 +240,10 @@ class ForegroundWatcher:
         return [b.lower() for b in self.cfg.get("ai_targets", {}).get("browsers", [])]
 
     def start(self):
-        for target in (self._pump, self._poll):
+        targets = [self._pump, self._poll]
+        if self.on_drag and self.cfg.get("guard", {}).get("drag_warn", True):
+            targets.append(self._mouse_pump)
+        for target in targets:
             t = threading.Thread(target=target, daemon=True)
             t.start()
             self._threads.append(t)
@@ -245,6 +251,11 @@ class ForegroundWatcher:
 
     def stop(self):
         self._stop.set()
+        if self._mouse_tid:
+            try:
+                win32api.PostThreadMessage(self._mouse_tid, win32con.WM_QUIT, 0, 0)
+            except Exception:
+                pass
         for t in self._threads:
             t.join(timeout=2)
 
@@ -265,12 +276,6 @@ class ForegroundWatcher:
                     None, self._drag_proc, 0, 0, WINEVENT_OUTOFCONTEXT,
                 )
                 log.info("drag-start hook installed: %s", self._drag_hook)
-                # Explorer 等拖拽源不发 DRAGDROPSTART，鼠标手势兜底检测
-                self._mouse_proc = MouseHookProc(self._mouse_cb)
-                self._mouse_hook = _user32.SetWindowsHookExW(
-                    WH_MOUSE_LL, self._mouse_proc, None, 0,
-                )
-                log.info("mouse gesture hook installed: %s", self._mouse_hook)
             while not self._stop.is_set():
                 win32gui.PumpWaitingMessages()
                 self._stop.wait(0.05)
@@ -281,6 +286,24 @@ class ForegroundWatcher:
             if self._drag_hook:
                 _user32.UnhookWinEvent(self._drag_hook)
                 self._drag_hook = None
+            pythoncom.CoUninitialize()
+
+    def _mouse_pump(self):
+        # 独立线程 + 阻塞 GetMessage：鼠标事件即时分发；
+        # 与 _pump 共线程会被 50ms 泵间隔/UIA 重活延迟致系统鼠标卡顿
+        pythoncom.CoInitialize()
+        try:
+            self._mouse_tid = win32api.GetCurrentThreadId()
+            self._mouse_proc = MouseHookProc(self._mouse_cb)
+            self._mouse_hook = _user32.SetWindowsHookExW(
+                WH_MOUSE_LL, self._mouse_proc, None, 0,
+            )
+            log.info("mouse gesture hook installed: %s", self._mouse_hook)
+            msg = win32gui.MSG()
+            while win32gui.GetMessage(msg, 0, 0, 0) > 0:
+                win32gui.TranslateMessage(msg)
+                win32gui.DispatchMessage(msg)
+        finally:
             if self._mouse_hook:
                 _user32.UnhookWindowsHookEx(self._mouse_hook)
                 self._mouse_hook = None
