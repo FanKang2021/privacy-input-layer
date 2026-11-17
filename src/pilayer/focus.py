@@ -23,6 +23,10 @@ log = logging.getLogger("pilayer.focus")
 EVENT_SYSTEM_FOREGROUND = 0x0003
 EVENT_SYSTEM_DRAGDROPSTART = 0x000D
 WINEVENT_OUTOFCONTEXT = 0x0000
+WH_MOUSE_LL = 14
+WM_MOUSEMOVE = 0x0200
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
 
 if sys.platform == "win32":
     _user32 = ctypes.windll.user32
@@ -31,6 +35,30 @@ if sys.platform == "win32":
         None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p,
         ctypes.c_long, ctypes.c_long, ctypes.c_uint32, ctypes.c_uint32,
     )
+    MouseHookProc = ctypes.WINFUNCTYPE(
+        ctypes.c_long, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p,
+    )
+
+    class _POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    class MSLLHOOKSTRUCT(ctypes.Structure):
+        _fields_ = [
+            ("pt", _POINT),
+            ("mouseData", ctypes.c_uint32),
+            ("flags", ctypes.c_uint32),
+            ("time", ctypes.c_uint32),
+            ("dwExtraInfo", ctypes.c_void_p),
+        ]
+
+    _user32.SetWindowsHookExW.argtypes = [
+        ctypes.c_int, MouseHookProc, ctypes.c_void_p, ctypes.c_uint32,
+    ]
+    _user32.SetWindowsHookExW.restype = ctypes.c_void_p
+    _user32.CallNextHookEx.argtypes = [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p,
+    ]
+    _user32.CallNextHookEx.restype = ctypes.c_long
 
 
 _URLISH_RE = re.compile(r"^[\w-]+(\.[\w-]+)+(/[^\s]*)?$")
@@ -198,6 +226,10 @@ class ForegroundWatcher:
         self._proc = None
         self._drag_hook = None
         self._drag_proc = None
+        self._mouse_hook = None
+        self._mouse_proc = None
+        self._drag_track = None
+        self._drag_candidate = None
         self._threads = []
         self._heur_cache = None
 
@@ -233,6 +265,12 @@ class ForegroundWatcher:
                     None, self._drag_proc, 0, 0, WINEVENT_OUTOFCONTEXT,
                 )
                 log.info("drag-start hook installed: %s", self._drag_hook)
+                # Explorer 等拖拽源不发 DRAGDROPSTART，鼠标手势兜底检测
+                self._mouse_proc = MouseHookProc(self._mouse_cb)
+                self._mouse_hook = _user32.SetWindowsHookExW(
+                    WH_MOUSE_LL, self._mouse_proc, None, 0,
+                )
+                log.info("mouse gesture hook installed: %s", self._mouse_hook)
             while not self._stop.is_set():
                 win32gui.PumpWaitingMessages()
                 self._stop.wait(0.05)
@@ -243,6 +281,9 @@ class ForegroundWatcher:
             if self._drag_hook:
                 _user32.UnhookWinEvent(self._drag_hook)
                 self._drag_hook = None
+            if self._mouse_hook:
+                _user32.UnhookWindowsHookEx(self._mouse_hook)
+                self._mouse_hook = None
             pythoncom.CoUninitialize()
 
     def _poll(self):
@@ -250,6 +291,13 @@ class ForegroundWatcher:
         try:
             last_title = None
             while not self._stop.wait(0.3):
+                cand = self._drag_candidate
+                if cand:
+                    self._drag_candidate = None
+                    try:
+                        self._evaluate_drag(cand)
+                    except Exception as e:
+                        log.warning("drag evaluate error: %s", e)
                 hwnd = win32gui.GetForegroundWindow()
                 title = win32gui.GetWindowText(hwnd)
                 # 浏览器内换 tab/导航、或任何应用标题变化时重新评估
@@ -273,6 +321,41 @@ class ForegroundWatcher:
             self.on_drag()
         except Exception as e:
             log.warning("drag event error: %s", e)
+
+    def _mouse_cb(self, ncode, wparam, lparam):
+        # LL 回调只做轻量记录；进程解析/分类留给 _poll 线程
+        if ncode >= 0:
+            ms = ctypes.cast(lparam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
+            x, y = ms.pt.x, ms.pt.y
+            if wparam == WM_LBUTTONDOWN:
+                self._drag_track = [win32gui.GetForegroundWindow(), x, y, time.time(), 0]
+            elif wparam == WM_MOUSEMOVE and self._drag_track:
+                t = self._drag_track
+                t[4] += abs(x - t[1]) + abs(y - t[2])
+                t[1], t[2] = x, y
+            elif wparam == WM_LBUTTONUP and self._drag_track:
+                t = self._drag_track
+                self._drag_track = None
+                if time.time() - t[3] > 0.2 and t[4] > 32:
+                    self._drag_candidate = (t[0], win32gui.GetForegroundWindow())
+        return _user32.CallNextHookEx(self._mouse_hook, ncode, wparam, lparam)
+
+    def _evaluate_drag(self, cand):
+        start, end = cand
+        if not start or not end or start == end:
+            return
+        proc_s = process_name(start)
+        proc_e = process_name(end)
+        if not proc_e or proc_s == proc_e:
+            return  # 同应用内划选/框选，不是跨应用拖放
+        title = win32gui.GetWindowText(end)
+        url = browser_url(end) if proc_e in self._browsers() else None
+        ai = classify_target(proc_e, url, self.cfg, title)
+        if not ai and self._state and win32gui.GetForegroundWindow() == end:
+            ai = True
+        if ai:
+            log.info("drag gesture into AI warned (proc=%s)", proc_e)
+            self.on_drag()
 
     def _is_newtab_chat(self, proc: str, url: str | None, title: str) -> bool:
         t = self.cfg.get("ai_targets", {})

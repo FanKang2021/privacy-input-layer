@@ -128,3 +128,43 @@ def test_drag_warn_throttled():
     a._on_drag()
     a._on_drag()
     assert len(msgs) == 1
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 mouse hook only")
+def test_mouse_gesture_sets_candidate():
+    import ctypes as c
+    from pilayer.focus import ForegroundWatcher, MSLLHOOKSTRUCT
+    w = ForegroundWatcher({}, lambda ai: None, on_drag=lambda: None)
+
+    def ev(x, y):
+        m = MSLLHOOKSTRUCT()
+        m.pt.x, m.pt.y = x, y
+        return c.byref(m)
+
+    w._mouse_cb(0, 0x0201, ev(0, 0))
+    w._drag_track[3] -= 1  # 模拟按住 >200ms
+    w._mouse_cb(0, 0x0200, ev(60, 60))
+    w._mouse_cb(0, 0x0202, ev(60, 60))
+    assert w._drag_candidate is not None
+    # 单击（无位移）不产生候选
+    w._drag_candidate = None
+    w._mouse_cb(0, 0x0201, ev(0, 0))
+    w._drag_track[3] -= 1
+    w._mouse_cb(0, 0x0202, ev(0, 0))
+    assert w._drag_candidate is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
+def test_drag_cross_proc_into_ai_warns(monkeypatch):
+    import pilayer.focus as f
+    calls = []
+    w = f.ForegroundWatcher(
+        {"ai_targets": {"processes": ["workbuddy.exe"]}},
+        lambda ai: None, on_drag=lambda: calls.append(1),
+    )
+    monkeypatch.setattr(f, "process_name", lambda h: {1: "explorer.exe", 2: "workbuddy.exe"}[h])
+    monkeypatch.setattr(f.win32gui, "GetWindowText", lambda h: "")
+    w._evaluate_drag((1, 2))
+    assert calls == [1]
+    w._evaluate_drag((2, 2))  # 同窗划选不警告
+    assert calls == [1]

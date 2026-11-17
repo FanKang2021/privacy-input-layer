@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.6
+
+### Fixed
+- Drag warning never fired for Explorer drags: EVENT_SYSTEM_DRAGDROPSTART is
+  source-emitted and Explorer never sends it. Added WH_MOUSE_LL gesture
+  fallback: left-held + path > 32px + >200ms, released over a different
+  process classified as AI => warn (in-app text selection / rubber-band
+  excluded); heavy classification runs off-hook in the poll thread
+
 ## 0.5.5
 
 ### Added
