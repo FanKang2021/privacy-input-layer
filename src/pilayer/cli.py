@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from .config import app_dir, load_config
 from .engine import MappingStore, TextMasker
@@ -13,6 +14,20 @@ def _build_masker() -> TextMasker:
     store = MappingStore(app_dir() / "mappings.db")
     keywords = cfg["rules"].get("custom_keywords") or []
     return TextMasker(store, cfg["rules"], keywords)
+
+
+def install_sendto() -> Path:
+    """右键「发送到」入口：脱敏副本生成在原件旁，拖拽副本即安全。"""
+    import os
+    sendto = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "SendTo"
+    sendto.mkdir(parents=True, exist_ok=True)
+    bat = sendto / "Masked copy.bat"
+    if getattr(sys, "frozen", False):
+        cmd = f'"{sys.executable}" mask-file "%1"'
+    else:
+        cmd = f'"{sys.executable}" -m pilayer mask-file "%1"'
+    bat.write_text(f"@echo off\r\n{cmd}\r\nif errorlevel 1 pause\r\n", encoding="gbk")
+    return bat
 
 
 def main(argv=None):
@@ -55,16 +70,7 @@ def main(argv=None):
         return 0
 
     if cmd == "install-sendto":
-        import os
-        from pathlib import Path
-
-        sendto = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "SendTo"
-        bat = sendto / "Masked copy.bat"
-        bat.write_text(
-            f'@echo off\r\n"{sys.executable}" -m pilayer mask-file "%1"\r\npause\r\n',
-            encoding="gbk",
-        )
-        print(f"Installed: {bat}")
+        print(f"Installed: {install_sendto()}")
         return 0
 
     masker = _build_masker()

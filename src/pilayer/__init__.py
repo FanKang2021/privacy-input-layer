@@ -1,3 +1,3 @@
 """privacy-input-layer: AI 隐私输入层。"""
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"

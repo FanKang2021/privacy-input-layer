@@ -173,6 +173,15 @@ class Application:
     def _mask_files(self, icon, item):
         threading.Thread(target=self._mask_files_work, daemon=True).start()
 
+    def _install_sendto(self, icon, item):
+        from .cli import install_sendto
+        try:
+            bat = install_sendto()
+        except Exception as e:
+            log.warning("install sendto: %s", e)
+            return
+        self.notify("privacy-input-layer", t("sendto_done", path=bat))
+
     def _mask_files_work(self):
         """拖拽走 OLE 不经过剪贴板，无法透明拦截；提供手动脱敏副本出口。"""
         import ctypes
@@ -276,6 +285,7 @@ class Application:
             pystray.MenuItem(lambda item: t("recent"), self._recent_menu()),
             pystray.MenuItem(lambda item: t("restore_now"), self._restore_now),
             pystray.MenuItem(lambda item: t("mask_files"), self._mask_files),
+            pystray.MenuItem(lambda item: t("sendto_install"), self._install_sendto),
             pystray.MenuItem(
                 lambda item: t("autostart_on") if self._autostart_enabled() else t("autostart_off"),
                 self._toggle_autostart,

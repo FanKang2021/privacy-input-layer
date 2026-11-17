@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.4
+
+### Fixed
+- SendTo bat invoked `-m pilayer`, which the frozen exe's argparse entry cannot
+  parse; frozen installs now emit the exe-native `mask-file "%1"` invocation;
+  console pauses only on failure
+
+### Added
+- Tray "Install SendTo entry": one-click Explorer right-click → Send to →
+  Masked copy; the masked copy lands next to the original for safe dragging
+  (drag & drop itself uses OLE and is uninterceptable in user mode by design)
+
 ## 0.5.3
 
 ### Fixed

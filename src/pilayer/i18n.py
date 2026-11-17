@@ -40,6 +40,8 @@ STRINGS = {
         "mask_files": "Mask file…",
         "mask_files_done": "Masked {n} file(s) to {dir} - drag the copies",
         "mask_files_none": "No supported file masked",
+        "sendto_install": "Install SendTo entry (right-click)",
+        "sendto_done": "SendTo installed: {path}",
     },
     "zh": {
         "guard_on": "守卫：开启",
@@ -78,6 +80,8 @@ STRINGS = {
         "mask_files": "脱敏文件…",
         "mask_files_done": "已脱敏 {n} 个文件 → {dir}（拖拽副本即可）",
         "mask_files_none": "未脱敏任何文件",
+        "sendto_install": "安装右键「发送到」入口",
+        "sendto_done": "已安装发送到入口：{path}",
     },
 }
 
