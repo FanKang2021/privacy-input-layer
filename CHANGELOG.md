@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+- Image file masking (png/jpg/jpeg/bmp/webp): local OCR pixel-mask masked copies
+- PDF masking: pypdfium2 render -> OCR pixel-mask -> img2pdf reassemble
+  (license-safe, avoids PyMuPDF AGPL); image-based output, text layer lost
+- pptx masking/restoring (python-pptx, paragraphs + tables)
+- OpenDocument odt/ods/odp masking/restoring (content.xml text nodes, format preserved)
+- macOS clipboard image masking (NSPasteboard TIFF/PNG -> mask -> PNG writeback)
+
+### Notes
+- Legacy binary doc/xls/ppt unsupported with save-as guidance; image/PDF restore
+  errors by design (irreversible); Linux clipboard images unsupported (roadmap)
+
 ## 0.4.14
 
 ### Fixed

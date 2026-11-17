@@ -205,6 +205,8 @@ class MacGuard:
     def _on_copy(self):
         if not self.enabled:
             return
+        if self._mask_clipboard_image():
+            return
         text = self.read_text()
         if not text:
             return
@@ -221,6 +223,36 @@ class MacGuard:
             self.write_text(r.text)
             kinds = "/".join(sorted(set(r.kinds)))
             self.events.appendleft(f"{time.strftime('%H:%M:%S')} masked {r.count} ({kinds})")
+
+    def _mask_clipboard_image(self) -> bool:
+        from AppKit import NSPasteboardTypeTIFF, NSPasteboardTypePNG
+        types = self._pb.types() or []
+        has_img = NSPasteboardTypeTIFF in types or NSPasteboardTypePNG in types
+        if not has_img:
+            return False
+        if self.mode == "focus" and not self.ai_focused:
+            return False
+        data = self._pb.dataForType_(NSPasteboardTypePNG) or self._pb.dataForType_(NSPasteboardTypeTIFF)
+        if not data:
+            return False
+        import io
+        from PIL import Image
+        from ..engine.image import ImageMasker
+        try:
+            img = Image.open(io.BytesIO(bytes(data)))
+            im = ImageMasker(self.masker.rules_cfg, self.masker.keywords)
+            masked, count = im.mask(img)
+            if not count:
+                return False
+            buf = io.BytesIO()
+            masked.convert("RGB").save(buf, format="PNG")
+            self._pb.clearContents()
+            self._pb.setData_forType_(buf.getvalue(), NSPasteboardTypePNG)
+            self.events.appendleft(f"{time.strftime('%H:%M:%S')} image masked {count}")
+            return True
+        except Exception as e:
+            log.warning("mac image mask error: %s", e)
+            return False
 
     def start(self):
         threading.Thread(target=self._poll_loop, daemon=True).start()

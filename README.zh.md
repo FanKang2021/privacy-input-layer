@@ -27,7 +27,8 @@
 | 右键文件 → 发送到 → Masked copy | 生成 `.masked` 副本供上传 | 一步 |
 | AI 产出的文件回填 | `restore-file` 将占位符换回真实值 | 一条命令 |
 
-支持文件：`txt / md / csv / json / log / docx / xlsx`。
+支持文件：`txt / md / csv / json / log / docx / xlsx / pptx / odt / ods / odp / png / jpg / jpeg / bmp / webp / pdf`。
+图片与 PDF 经本地 OCR 像素打码（不可逆）；PDF 输出为图像型（文本层丢失）。legacy 二进制 `.doc / .xls / .ppt` 不支持——先另存为现代格式。
 
 ## 快速开始
 
@@ -160,7 +161,10 @@ pilayer stats                                  # 本地映射统计
 - 图片打码粒度为 OCR 文字行，会连带遮盖同行非敏感文字（宁多勿漏）。
 - 触发脱敏重写剪贴板时会清空富文本格式（HTML/RTF），防止客户端从其他格式读到原文。
 - 切窗瞬间图片 OCR 需几百毫秒，极快图片粘贴理论上存在竞态（文本已被粘贴钩子覆盖）。
-- 文件**上传后**客户端直接读磁盘，用户态无法透明拦截，因此走"脱敏副本"一步操作；pdf 暂不支持。
+- 文件**上传后**客户端直接读磁盘，用户态无法透明拦截，因此走"脱敏副本"一步操作。
+- 图片/PDF 打码不可逆（像素销毁），`restore-file` 对其报错属设计；PDF 打码渲染页为图像（文本层丢失，扫描/文本 PDF 统一覆盖）。
+- legacy 二进制 `.doc/.xls/.ppt` 不支持（二进制解析不可靠）；另存为 `.docx/.xlsx/.pptx`。
+- Linux 剪贴板图片不支持（X11 图像 selection 协议）；图片文件与 PDF 仍可经 CLI/发送到 打码。
 - docx 脱敏按段落整段重写（PII 可能跨 run），被掩段落内的 run 级格式会丢失；xlsx 公式与非字符串单元格保留。
 - 自动检测依赖客户端暴露无障碍树：个别 Electron 壳树不全时需一行白名单兜底（或以 `--force-renderer-accessibility` 启动）；极小概率误判（人类聊天软件含模型名控件等），可 `auto_detect: false` 关闭。
 - 人名等无规则特征的 PII 首版靠 `custom_keywords`，本地 NER 在路线图。

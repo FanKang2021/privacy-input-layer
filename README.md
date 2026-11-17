@@ -27,7 +27,8 @@ Proxy-style masking (a reverse proxy behind a custom baseUrl) only covers BYOK e
 | Right-click file → Send to → Masked copy | Generates `.masked` copy for upload | one step |
 | Restore AI-produced files | `restore-file` swaps placeholders back | one command |
 
-File formats: `txt / md / csv / json / log / docx / xlsx`.
+File formats: `txt / md / csv / json / log / docx / xlsx / pptx / odt / ods / odp / png / jpg / jpeg / bmp / webp / pdf`.
+Images and PDF are pixel-masked via local OCR (irreversible); PDF output is image-based (text layer lost). Legacy binary `.doc / .xls / .ppt` unsupported — save as modern formats first.
 
 ## Quick start
 
@@ -165,7 +166,10 @@ Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Chea
 - Image masking granularity is the OCR text line (over-masks neighboring non-sensitive text on the same line — safer direction).
 - Rewriting the clipboard strips rich-text formats (HTML/RTF) to prevent clients reading originals from alternate clipboard formats.
 - Image OCR on window-switch takes hundreds of ms; an extremely fast image paste inside that window can slip through (text is covered by the paste hook).
-- Files read from disk after upload cannot be intercepted transparently in user mode — hence the masked-copy step. PDF not supported yet.
+- Files read from disk after upload cannot be intercepted transparently in user mode — hence the masked-copy step.
+- Image/PDF masking is irreversible (pixels destroyed); `restore-file` on them errors by design. PDF masking renders pages to images (text layer lost, scanned+text PDFs covered uniformly).
+- Legacy binary `.doc/.xls/.ppt` unsupported (unreliable binary parsing); save as `.docx/.xlsx/.pptx`.
+- Linux clipboard images unsupported (X11 image selection protocol); image files and PDF still mask via CLI/SendTo.
 - docx masking rewrites paragraphs as a whole (PII can span runs), so per-run formatting inside masked paragraphs is lost; xlsx formulas and non-string cells are preserved.
 - Auto-detection depends on clients exposing accessibility trees; a few Electron shells expose sparse trees and need one whitelist line (or launch with `--force-renderer-accessibility`). Rare false positives possible (e.g. a human chat app with model-named controls); disable with `auto_detect: false`.
 - Names/addresses without regex signatures rely on `custom_keywords` for now; local NER on the roadmap.
