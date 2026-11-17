@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.13
+
+### Fixed
+- HTML-only clipboard sources (no CF_UNICODETEXT): hosts parsing CF_HTML lost
+  line breaks (single-line Notepad paste). Guard now normalizes such clipboard
+  to unicode plain text with block-level newlines on copy and before paste;
+  html_to_text converts block tags to newlines
+
 ## 0.4.12
 
 ### Fixed

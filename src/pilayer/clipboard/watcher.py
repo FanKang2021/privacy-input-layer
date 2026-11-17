@@ -45,9 +45,17 @@ class _TextExtractor(HTMLParser):
     def handle_data(self, data):
         self.parts.append(data)
 
+    def handle_starttag(self, tag, attrs):
+        if tag in ("br", "p", "div", "li", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6"):
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in ("p", "div", "li", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6"):
+            self.parts.append("\n")
+
 
 def html_to_text(raw) -> str | None:
-    """CF_HTML-only 复制源的回退提取：取 StartFragment 片段去标签。"""
+    """CF_HTML-only 复制源的回退提取：取 StartFragment 片段去标签、块级转换行。"""
     if isinstance(raw, bytes):
         raw = raw.decode("utf-8", errors="replace")
     if not isinstance(raw, str):
@@ -60,6 +68,7 @@ def html_to_text(raw) -> str | None:
     except Exception:
         return None
     text = _html.unescape("".join(p.parts))
+    text = re.sub(r"\n{3,}", "\n\n", text).strip("\n")
     return text or None
 
 # pywin32 未封装这两个 API，直接调 user32
@@ -256,10 +265,30 @@ class ClipboardWatcher:
 
     # ---------- 变换逻辑（返回通知消息或 None） ----------
 
+    def _normalize_html_clipboard(self):
+        """源应用只放 CF_HTML 时宿主自解 HTML 会丢换行；归一化为 unicode 纯文本。"""
+        if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
+            return
+        if not win32clipboard.IsClipboardFormatAvailable(win32con.CF_HTML):
+            return
+        opened = self._open()
+        if not opened:
+            return
+        try:
+            raw = win32clipboard.GetClipboardData(win32con.CF_HTML)
+        except Exception:
+            return
+        finally:
+            win32clipboard.CloseClipboard()
+        text = html_to_text(raw)
+        if text:
+            self._write_text(text)
+
     def _on_update(self) -> str | None:
         if not self.enabled:
             return None
         self._maybe_learn()
+        self._normalize_html_clipboard()
         if self.mode == "focus" and not self.ai_focused:
             # 非 AI 前台：只还原，不脱敏
             if self.cfg.get("hdrop_enabled") and win32clipboard.IsClipboardFormatAvailable(win32con.CF_HDROP):
@@ -304,6 +333,7 @@ class ClipboardWatcher:
             return False
         if not self._text_available():
             return False
+        self._normalize_html_clipboard()
         if not self.cfg.get("paste_injection", True):
             self.ensure_for_paste()
             return False
