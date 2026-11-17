@@ -41,26 +41,26 @@ jobs:
         if: runner.os == 'Windows'
         run: >
           pyinstaller --noconsole --onefile --name pilayer-guard --paths src
-          --collect-all rapidocr_onnxruntime --collect-all onnxruntime
+          --collect-all rapidocr_onnxruntime --collect-all onnxruntime --collect-all pypdfium2
           --hidden-import uiautomation --hidden-import comtypes.gen
-          --hidden-import pystray --hidden-import docx --hidden-import openpyxl
+          --hidden-import pystray --hidden-import docx --hidden-import openpyxl --hidden-import pptx --hidden-import img2pdf
           --distpath dist --workpath build --specpath build packaging/run_guard.py
       - name: Build (macOS)
         if: runner.os == 'macOS'
         run: >
           pyinstaller --noconsole --onefile --name pilayer-guard${{ matrix.suffix }} --paths src
-          --collect-all rapidocr_onnxruntime --collect-all onnxruntime
+          --collect-all rapidocr_onnxruntime --collect-all onnxruntime --collect-all pypdfium2
           --collect-all objc --collect-all Quartz --collect-all AppKit
           --collect-all ApplicationServices
-          --hidden-import pystray --hidden-import docx --hidden-import openpyxl
+          --hidden-import pystray --hidden-import docx --hidden-import openpyxl --hidden-import pptx --hidden-import img2pdf
           --distpath dist --workpath build --specpath build packaging/run_guard.py
       - name: Build (Linux)
         if: runner.os == 'Linux'
         run: >
           pyinstaller --noconsole --onefile --name pilayer-guard${{ matrix.suffix }} --paths src
-          --collect-all rapidocr_onnxruntime --collect-all onnxruntime
+          --collect-all rapidocr_onnxruntime --collect-all onnxruntime --collect-all pypdfium2
           --collect-all Xlib --hidden-import Xlib.ext.xtest
-          --hidden-import pystray --hidden-import docx --hidden-import openpyxl
+          --hidden-import pystray --hidden-import docx --hidden-import openpyxl --hidden-import pptx --hidden-import img2pdf
           --distpath dist --workpath build --specpath build packaging/run_guard.py
       - uses: actions/upload-artifact@v4
         with:
