@@ -198,7 +198,7 @@ class Application:
                 lambda item: t("mode_focus") if self.cfg["guard"].get("mode", "focus") == "focus" else t("mode_always"),
                 self._toggle_mode,
             ),
-            pystray.MenuItem(lambda item: t("recent"), self._recent_menu()),
+            pystray.MenuItem(lambda item: t("recent"), self._recent_menu),
             pystray.MenuItem(lambda item: t("restore_now"), self._restore_now),
             pystray.MenuItem(
                 lambda item: t("autostart_on") if self._autostart_enabled() else t("autostart_off"),

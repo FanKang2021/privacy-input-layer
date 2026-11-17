@@ -77,3 +77,14 @@ def test_config_migration_old_injection_default(tmp_path):
     cfg["guard"]["paste_injection"] = True
     p.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     assert load_config(p)["guard"]["paste_injection"] is True
+
+
+def test_recent_submenu_dynamic():
+    from pilayer.app import Application
+    a = Application()
+    a.watcher.events.appendleft("12:00:00 masked 2 (SECRET)")
+    menu = a._menu()
+    recent = [i for i in menu.items if callable(i.action) and i.action.__name__ == "_recent_menu"][0]
+    sub = recent.action()
+    texts = [(i.text(None) if callable(i.text) else i.text) for i in sub.items]
+    assert any("masked 2" in (t if isinstance(t, str) else "") for t in texts)

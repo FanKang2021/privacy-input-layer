@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+### Fixed
+- Recent-masks tray submenu never showed events: Menu object was passed as the
+  action positional (evaluated once, frozen empty); now passes the callable so
+  pystray builds the submenu dynamically on each open
+
 ## 0.5.0
 
 ### Added
