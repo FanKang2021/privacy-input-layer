@@ -31,8 +31,9 @@ def test_handle_drop_masks_and_calls_on_masked(tmp_path, monkeypatch):
     zone = dz.DropZone(masker, tmp_path / "copies", ".masked", on_masked=got.append)
     zone._handle_drop(1)
     assert len(got) == 1
-    assert ".masked.txt" in got[0]
-    assert "[PHONE_" in Path(got[0]).read_text(encoding="utf-8")
+    paths = got[0]  # on_masked 收到的是路径列表
+    assert len(paths) == 1 and ".masked.txt" in paths[0]
+    assert "[PHONE_" in Path(paths[0]).read_text(encoding="utf-8")
 
 
 def test_relay_writes_hdrop_and_resends(monkeypatch):
