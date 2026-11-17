@@ -43,6 +43,10 @@ STRINGS = {
         "sendto_install": "Install SendTo entry (right-click)",
         "sendto_done": "SendTo installed: {path}",
         "drag_warn": "Drag & drop bypasses the guard (OLE). Files: right-click > Send to > Masked copy, then drag the copy. Text: use Ctrl+V.",
+        "zone_on": "Drop zone: on",
+        "zone_off": "Drop zone: off",
+        "zone_sent": "Masked {n} file(s) -> sent to the AI window",
+        "zone_masked": "Masked {n} file(s) -> {dir} (drag the copies)",
     },
     "zh": {
         "guard_on": "守卫：开启",
@@ -84,6 +88,10 @@ STRINGS = {
         "sendto_install": "安装右键「发送到」入口",
         "sendto_done": "已安装发送到入口：{path}",
         "drag_warn": "拖拽不经过守卫（OLE 通道）。文件请右键→发送到→Masked copy 后拖副本；文本请用 Ctrl+V。",
+        "zone_on": "脱敏浮窗：开",
+        "zone_off": "脱敏浮窗：关",
+        "zone_sent": "已脱敏 {n} 个文件→已送入 AI 窗口",
+        "zone_masked": "已脱敏 {n} 个文件→{dir}（拖副本）",
     },
 }
 

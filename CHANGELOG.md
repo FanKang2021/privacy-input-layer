@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+- Desktop masking drop zone: own topmost window (DragAcceptFiles / WM_DROPFILES)
+  is a legal OLE drop target we own. Drag originals onto it -> masked copies ->
+  auto-relay (clipboard HDROP + Ctrl+V) into the last AI window: one-drag flow
+  without injection or kernel driver. Tray toggle; guard.drop_zone /
+  drop_zone_relay; falls back to opening the copies dir when no AI target
+
+### Fixed
+- Mouse pump thread died at win32gui.MSG (absent in pywin32) so the drag
+  warning never received events; now ctypes MSG + GetMessageW with exit logging
+- Tray mask-file dialog thread now CoInitialize (OFN_EXPLORER shell dialog) and
+  wraps the whole flow in try/except logging
+
 ## 0.5.9
 
 ### Fixed

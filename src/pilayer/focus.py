@@ -62,6 +62,25 @@ if sys.platform == "win32":
     ]
     _user32.CallNextHookEx.restype = ctypes.c_long
 
+    # pywin32 无 win32gui.MSG，消息循环用 ctypes 自有结构
+    class _MSG(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", ctypes.c_void_p),
+            ("message", ctypes.c_uint32),
+            ("wParam", ctypes.c_void_p),
+            ("lParam", ctypes.c_void_p),
+            ("time", ctypes.c_uint32),
+            ("pt", _POINT),
+        ]
+
+    _user32.GetMessageW.argtypes = [
+        ctypes.POINTER(_MSG), ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint,
+    ]
+    _user32.GetMessageW.restype = ctypes.c_int
+    _user32.TranslateMessage.argtypes = [ctypes.POINTER(_MSG)]
+    _user32.DispatchMessageW.argtypes = [ctypes.POINTER(_MSG)]
+    _user32.DispatchMessageW.restype = ctypes.c_long
+
 
 _URLISH_RE = re.compile(r"^[\w-]+(\.[\w-]+)+(/[^\s]*)?$")
 _ADDRESS_BAR_KEYS = ("address", "地址", "搜索或输入", "search or enter")
@@ -236,6 +255,7 @@ class ForegroundWatcher:
         self._mouse_events = 0
         self._mouse_events_logged = 0
         self._mouse_log_at = 0.0
+        self.last_ai_hwnd = None
         self._threads = []
         self._heur_cache = None
 
@@ -302,10 +322,14 @@ class ForegroundWatcher:
                 WH_MOUSE_LL, self._mouse_proc, None, 0,
             )
             log.info("mouse gesture hook installed: %s", self._mouse_hook)
-            msg = win32gui.MSG()
-            while win32gui.GetMessage(msg, 0, 0, 0) > 0:
-                win32gui.TranslateMessage(msg)
-                win32gui.DispatchMessage(msg)
+            msg = _MSG()
+            try:
+                while _user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                    _user32.TranslateMessage(ctypes.byref(msg))
+                    _user32.DispatchMessageW(ctypes.byref(msg))
+            except Exception as e:
+                log.exception("mouse pump loop error: %s", e)
+            log.info("mouse pump exited")
         finally:
             if self._mouse_hook:
                 _user32.UnhookWindowsHookEx(self._mouse_hook)
@@ -438,4 +462,6 @@ class ForegroundWatcher:
             # 日志不记标题/URL/控件原文：可能含 PII 或秘密（OWASP Logging）
             log.info("focus flip -> %s (proc=%s sig=%s)", ai, proc, sig.split(":")[0] if sig else None)
             self._state = ai
+            if ai:
+                self.last_ai_hwnd = hwnd
             self.on_change(ai)

@@ -67,6 +67,11 @@ class Application:
             from .clipboard.paste_hook import PasteHook
             self.paste_hook = PasteHook(self.watcher.handle_paste, self.watcher.drain_injection)
             self.watcher.resend_cb = lambda: self.paste_hook._resend(*self.paste_hook._last_combo)
+        from .dropzone import DropZone
+        self.dropzone = DropZone(
+            self.masker, self.dir / "copies", self.cfg["files"]["suffix"],
+            on_masked=self._on_zone_masked, notify=self.notify,
+        )
         self.icon = None
         self._update = None
 
@@ -194,7 +199,42 @@ class Application:
             return
         self.notify("privacy-input-layer", t("sendto_done", path=bat))
 
+    def _on_zone_masked(self, paths):
+        """浮窗脱敏后中继：剪贴板 HDROP 换副本 + 补发 Ctrl+V 到最近 AI 窗口。"""
+        self.watcher._write_hdrop(paths)
+        target = self.focus.last_ai_hwnd if self.focus else None
+        if target and self.cfg["guard"].get("drop_zone_relay", True) and self.paste_hook:
+            ctypes.windll.user32.SetForegroundWindow(target)
+            time.sleep(0.15)
+            self.paste_hook._resend(0x56, True, False)
+            self.notify("privacy-input-layer", t("zone_sent", n=len(paths)))
+        else:
+            os.startfile(str(self.watcher.copies_dir))
+            self.notify("privacy-input-layer", t("zone_masked", n=len(paths), dir=self.watcher.copies_dir))
+
+    def _toggle_dropzone(self, icon, item):
+        cur = self.cfg["guard"].get("drop_zone", True)
+        self.cfg["guard"]["drop_zone"] = not cur
+        if self.dropzone:
+            if cur:
+                self.dropzone.hide()
+            else:
+                self.dropzone.show()
+        self._save_config()
+        icon.update_menu()
+
     def _mask_files_work(self):
+        import pythoncom
+        pythoncom.CoInitialize()
+        log.info("mask files work start")
+        try:
+            self._mask_files_inner()
+        except Exception as e:
+            log.exception("mask files work error: %s", e)
+        finally:
+            pythoncom.CoUninitialize()
+
+    def _mask_files_inner(self):
         """拖拽走 OLE 不经过剪贴板，无法透明拦截；提供手动脱敏副本出口。"""
         import ctypes
         from ctypes import wintypes
@@ -303,6 +343,10 @@ class Application:
             pystray.MenuItem(lambda item: t("mask_files"), self._mask_files),
             pystray.MenuItem(lambda item: t("sendto_install"), self._install_sendto),
             pystray.MenuItem(
+                lambda item: t("zone_on") if self.cfg["guard"].get("drop_zone", True) else t("zone_off"),
+                self._toggle_dropzone,
+            ),
+            pystray.MenuItem(
                 lambda item: t("autostart_on") if self._autostart_enabled() else t("autostart_off"),
                 self._toggle_autostart,
             ),
@@ -346,6 +390,8 @@ class Application:
             self.paste_hook.stop()
         if self.focus:
             self.focus.stop()
+        if self.dropzone:
+            self.dropzone.stop()
         self.watcher.stop()
         icon.stop()
         self.store.close()
@@ -362,6 +408,8 @@ class Application:
             self.paste_hook.start()
         if self.focus:
             self.focus.start()
+        if self.dropzone and self.cfg["guard"].get("drop_zone", True):
+            self.dropzone.start()
         if self.cfg["guard"].get("update_check", False):
             self._check_update()
 

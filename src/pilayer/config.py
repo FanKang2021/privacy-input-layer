@@ -21,6 +21,8 @@ DEFAULTS = {
         "paste_chunk_delay_ms": 40,
         "lazy_restore": True,
         "drag_warn": True,
+        "drop_zone": True,
+        "drop_zone_relay": True,
         "update_check": False,
     },
     "ai_targets": {
