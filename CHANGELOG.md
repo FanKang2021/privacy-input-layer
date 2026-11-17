@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.3
+
+### Fixed
+- Tray "Mask file…" dialog never opened: pywin32 GetOpenFileName rejects
+  keyword arguments; replaced with ctypes GetOpenFileNameW (own OPENFILENAMEW)
+- "Recent masks" submenu never expanded: pystray treats only Menu instances as
+  submenus — a callable action is a click callback (v0.5.1/v0.5.2 discarded the
+  returned Menu). Now passes a Menu instance and rebuilds the tray menu on
+  every guard event via an event-log hook
+
 ## 0.5.2
 
 ### Fixed

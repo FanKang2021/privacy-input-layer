@@ -56,6 +56,7 @@ class Application:
             self.masker, self.image_masker, self.cfg["guard"],
             self.dir / "copies", self.cfg["files"]["suffix"],
             notify=self.notify, on_learn=self._on_learn, ai_cfg=self.cfg,
+            on_event=self._refresh_menu,
         )
         self.focus = None
         if self.cfg["guard"].get("mode", "focus") == "focus":
@@ -89,6 +90,13 @@ class Application:
         if self.cfg["guard"].get("notify") and self.icon:
             try:
                 self.icon.notify(msg, title)
+            except Exception:
+                pass
+
+    def _refresh_menu(self):
+        if self.icon:
+            try:
+                self.icon.update_menu()
             except Exception:
                 pass
 
@@ -167,22 +175,53 @@ class Application:
 
     def _mask_files_work(self):
         """拖拽走 OLE 不经过剪贴板，无法透明拦截；提供手动脱敏副本出口。"""
+        import ctypes
+        from ctypes import wintypes
         import win32con
-        import win32gui
         from .files import SUPPORTED_EXTS, UnsupportedFile, mask_file
-        filt = "Supported\0*" + ";*".join(sorted(SUPPORTED_EXTS)) + "\0All files\0*.*\0"
-        try:
-            res = win32gui.GetOpenFileName(
-                Title=t("mask_files"), Filter=filt,
-                Flags=win32con.OFN_EXPLORER | win32con.OFN_FILEMUSTEXIST | win32con.OFN_NOCHANGEDIR,
-            )
-        except Exception as e:
-            log.warning("mask files dialog: %s", e)
+
+        class OFN(ctypes.Structure):
+            _fields_ = [
+                ("lStructSize", wintypes.DWORD),
+                ("hwndOwner", wintypes.HWND),
+                ("hInstance", wintypes.HANDLE),
+                ("lpstrFilter", wintypes.LPCWSTR),
+                ("lpstrCustomFilter", wintypes.LPWSTR),
+                ("nMaxCustFilter", wintypes.DWORD),
+                ("nFilterIndex", wintypes.DWORD),
+                ("lpstrFile", wintypes.LPWSTR),
+                ("nMaxFile", wintypes.DWORD),
+                ("lpstrFileTitle", wintypes.LPWSTR),
+                ("nMaxFileTitle", wintypes.DWORD),
+                ("lpstrInitialDir", wintypes.LPCWSTR),
+                ("lpstrTitle", wintypes.LPCWSTR),
+                ("Flags", wintypes.DWORD),
+                ("nFileOffset", wintypes.WORD),
+                ("nFileExtension", wintypes.WORD),
+                ("lpstrDefExt", wintypes.LPCWSTR),
+                ("lCustData", wintypes.LPARAM),
+                ("lpfnHook", ctypes.c_void_p),
+                ("lpTemplateName", wintypes.LPCWSTR),
+                ("pvReserved", ctypes.c_void_p),
+                ("dwReserved", wintypes.DWORD),
+                ("FlagsEx", wintypes.DWORD),
+            ]
+
+        buf = ctypes.create_unicode_buffer(4096)
+        ofn = OFN()
+        ofn.lStructSize = ctypes.sizeof(OFN)
+        ofn.lpstrFilter = "Supported\0*" + ";*".join(sorted(SUPPORTED_EXTS)) + "\0All files\0*.*\0"
+        ofn.lpstrFile = ctypes.cast(buf, wintypes.LPWSTR)
+        ofn.nMaxFile = 4096
+        ofn.lpstrTitle = t("mask_files")
+        ofn.Flags = (win32con.OFN_EXPLORER | win32con.OFN_FILEMUSTEXIST
+                     | win32con.OFN_PATHMUSTEXIST | win32con.OFN_NOCHANGEDIR)
+        fn = ctypes.windll.comdlg32.GetOpenFileNameW
+        fn.argtypes = [ctypes.POINTER(OFN)]
+        fn.restype = wintypes.BOOL
+        if not fn(ctypes.byref(ofn)):
             return
-        raw = res[0] if isinstance(res, tuple) else res
-        if not raw:
-            return
-        src = Path(raw)
+        src = Path(buf.value)
         self.watcher.copies_dir.mkdir(parents=True, exist_ok=True)
         dst = self.watcher.copies_dir / (src.stem + self.watcher.file_suffix + src.suffix)
         try:
@@ -234,7 +273,7 @@ class Application:
                 lambda item: t("mode_focus") if self.cfg["guard"].get("mode", "focus") == "focus" else t("mode_always"),
                 self._toggle_mode,
             ),
-            pystray.MenuItem(lambda item: t("recent"), self._recent_menu),
+            pystray.MenuItem(lambda item: t("recent"), self._recent_menu()),
             pystray.MenuItem(lambda item: t("restore_now"), self._restore_now),
             pystray.MenuItem(lambda item: t("mask_files"), self._mask_files),
             pystray.MenuItem(

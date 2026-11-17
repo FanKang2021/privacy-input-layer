@@ -84,7 +84,25 @@ def test_recent_submenu_dynamic():
     a = Application()
     a.watcher.events.appendleft("12:00:00 masked 2 (SECRET)")
     menu = a._menu()
-    recent = [i for i in menu.items if callable(i._action) and i._action.__name__ == "_recent_menu"][0]
-    sub = recent._action()
-    texts = [(i.text(None) if callable(i.text) else i.text) for i in sub.items]
+    # pystray 子菜单只认 Menu 实例；callable action 是点击回调（v0.5.2 前误用）
+    recent = [i for i in menu.items if i.submenu][0]
+    texts = [(i.text(None) if callable(i.text) else i.text) for i in recent.submenu.items]
     assert any("masked 2" in (t if isinstance(t, str) else "") for t in texts)
+    a.watcher.events.appendleft("12:00:01 masked 3 (PHONE)")
+    menu2 = a._menu()
+    recent2 = [i for i in menu2.items if i.submenu][0]
+    texts2 = [(i.text(None) if callable(i.text) else i.text) for i in recent2.submenu.items]
+    assert any("masked 3" in (t if isinstance(t, str) else "") for t in texts2)
+
+
+def test_events_hook_fires(tmp_path):
+    from pilayer.clipboard.watcher import ClipboardWatcher
+    from pilayer.engine import MappingStore, TextMasker
+    from pilayer.engine.image import ImageMasker
+    calls = []
+    w = ClipboardWatcher(
+        TextMasker(MappingStore(tmp_path / "m.db"), {}, []), ImageMasker({}),
+        {}, tmp_path, on_event=lambda: calls.append(1),
+    )
+    w.events.appendleft("x")
+    assert calls == [1]

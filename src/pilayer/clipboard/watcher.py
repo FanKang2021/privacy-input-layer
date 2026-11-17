@@ -40,6 +40,19 @@ log = logging.getLogger("pilayer.clipboard")
 CF_HTML = win32clipboard.RegisterClipboardFormat("HTML Format")
 
 
+class _Events(deque):
+    """事件流水：appendleft 后回调刷新托盘（pystray 子菜单只认 Menu 实例）。"""
+
+    def __init__(self, maxlen, hook):
+        super().__init__(maxlen=maxlen)
+        self._hook = hook
+
+    def appendleft(self, item):
+        super().appendleft(item)
+        if self._hook:
+            self._hook()
+
+
 class _TextExtractor(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -85,7 +98,7 @@ _user32.RemoveClipboardFormatListener.restype = ctypes.c_bool
 class ClipboardWatcher:
     def __init__(self, masker: TextMasker, image_masker: ImageMasker,
                  guard_cfg: dict, copies_dir: Path, file_suffix: str = ".masked",
-                 notify=None, on_learn=None, ai_cfg=None):
+                 notify=None, on_learn=None, ai_cfg=None, on_event=None):
         self.masker = masker
         self.image_masker = image_masker
         self.cfg = guard_cfg
@@ -102,7 +115,7 @@ class ClipboardWatcher:
         self._chunk_queue: deque = deque()
         self._chunk_next_at = 0.0
         self.resend_cb = None
-        self.events: deque = deque(maxlen=20)
+        self.events = _Events(20, on_event)
         self._hwnd = None
         self._suppress_seq = None
         self._thread = None
