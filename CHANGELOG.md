@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.8
+
+### Fixed
+- Recent-masks submenu stuck at "(no events)": submenu children are a Menu
+  snapshot and update_menu only re-renders the stale descriptor tree; the
+  event hook now rebuilds the whole menu (icon.menu setter)
+- Drag warning drop target used the foreground window, but dropping onto a
+  background window does not activate it; now WindowFromPoint + GA_ROOT at
+  button down/up, with decision logging
+- SendTo failed on filenames with spaces: Explorer passes %1 pre-quoted and
+  the bat wrapped it again (double quotes => path not found => pause with no
+  visible error, noconsole exe swallows stderr). Bat now uses %~1 + shift loop
+  (multi-select); CLI mask/restore failures log tracebacks to pilayer.log
+
 ## 0.5.7
 
 ### Fixed

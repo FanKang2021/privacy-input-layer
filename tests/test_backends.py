@@ -94,6 +94,14 @@ def test_recent_submenu_dynamic():
     recent2 = [i for i in menu2.items if i.submenu][0]
     texts2 = [(i.text(None) if callable(i.text) else i.text) for i in recent2.submenu.items]
     assert any("masked 3" in (t if isinstance(t, str) else "") for t in texts2)
+    # 事件 hook 须重建整棵菜单（子菜单快照否则永远空）
+    from types import SimpleNamespace
+    a.icon = SimpleNamespace()
+    a.watcher.events.appendleft("12:00:02 masked 4 (IP)")
+    a._refresh_menu()
+    recent3 = [i for i in a.icon.menu.items if i.submenu][0]
+    texts3 = [(i.text(None) if callable(i.text) else i.text) for i in recent3.submenu.items]
+    assert any("masked 4" in (t if isinstance(t, str) else "") for t in texts3)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="win32 tray/watcher only")

@@ -345,13 +345,21 @@ class ForegroundWatcher:
         except Exception as e:
             log.warning("drag event error: %s", e)
 
+    def _root_at(self, x, y):
+        try:
+            h = win32gui.WindowFromPoint((x, y))
+            return win32gui.GetAncestor(h, win32con.GA_ROOT) if h else 0
+        except Exception:
+            return 0
+
     def _mouse_cb(self, ncode, wparam, lparam):
-        # LL 回调只做轻量记录；进程解析/分类留给 _poll 线程
+        # LL 回调只做轻量记录；进程解析/分类留给 _poll 线程。
+        # 落点用光标下窗口而非前台：拖入后台窗口不一定激活它
         if ncode >= 0:
             ms = ctypes.cast(lparam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
             x, y = ms.pt.x, ms.pt.y
             if wparam == WM_LBUTTONDOWN:
-                self._drag_track = [win32gui.GetForegroundWindow(), x, y, time.time(), 0]
+                self._drag_track = [self._root_at(x, y), x, y, time.time(), 0]
             elif wparam == WM_MOUSEMOVE and self._drag_track:
                 t = self._drag_track
                 t[4] += abs(x - t[1]) + abs(y - t[2])
@@ -360,7 +368,7 @@ class ForegroundWatcher:
                 t = self._drag_track
                 self._drag_track = None
                 if time.time() - t[3] > 0.2 and t[4] > 32:
-                    self._drag_candidate = (t[0], win32gui.GetForegroundWindow())
+                    self._drag_candidate = (t[0], self._root_at(x, y))
         return _user32.CallNextHookEx(self._mouse_hook, ncode, wparam, lparam)
 
     def _evaluate_drag(self, cand):
@@ -376,8 +384,8 @@ class ForegroundWatcher:
         ai = classify_target(proc_e, url, self.cfg, title)
         if not ai and self._state and win32gui.GetForegroundWindow() == end:
             ai = True
+        log.info("drag evaluate %s->%s ai=%s", proc_s, proc_e, ai)
         if ai:
-            log.info("drag gesture into AI warned (proc=%s)", proc_e)
             self.on_drag()
 
     def _is_newtab_chat(self, proc: str, url: str | None, title: str) -> bool:

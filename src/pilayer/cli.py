@@ -26,10 +26,22 @@ def install_sendto() -> Path:
     sendto.mkdir(parents=True, exist_ok=True)
     bat = sendto / "Masked copy.bat"
     if getattr(sys, "frozen", False):
-        cmd = f'"{sys.executable}" mask-file "%1"'
+        cmd = f'"{sys.executable}"'
     else:
-        cmd = f'"{sys.executable}" -m pilayer mask-file "%1"'
-    bat.write_text(f"@echo off\r\n{cmd}\r\nif errorlevel 1 pause\r\n", encoding="gbk")
+        cmd = f'"{sys.executable}" -m pilayer'
+    # %~1 先剥掉 Explorer 可能自带的引号再包一层，含空格文件名不会双引号；
+    # shift 循环支持多选文件逐个脱敏
+    lines = [
+        "@echo off",
+        ":loop",
+        'if "%~1"=="" goto end',
+        f'{cmd} mask-file "%~1"',
+        "if errorlevel 1 pause",
+        "shift",
+        "goto loop",
+        ":end",
+    ]
+    bat.write_text("\r\n".join(lines) + "\r\n", encoding="gbk")
     return bat
 
 
@@ -91,11 +103,22 @@ def main(argv=None):
         print(r.text)
         print(f"restored {r.count}, unmapped {len(r.missing)}", file=sys.stderr)
     elif cmd == "mask-file":
-        r = mask_file(args.path, masker, dst=args.dst)
+        try:
+            r = mask_file(args.path, masker, dst=args.dst)
+        except Exception as e:
+            # noconsole exe 的 stderr 可能被吞，落日志保证 SendTo 失败可诊断
+            log.exception("cli mask-file failed name=%s", Path(args.path).name)
+            print(f"error: {e}", file=sys.stderr)
+            return 1
         log.info("cli mask-file name=%s count=%d dst=%s", Path(args.path).name, r.count, r.dst)
         print(f"{r.dst} (masked {r.count} item(s))")
     elif cmd == "restore-file":
-        r = restore_file(args.path, masker, dst=args.dst)
+        try:
+            r = restore_file(args.path, masker, dst=args.dst)
+        except Exception as e:
+            log.exception("cli restore-file failed name=%s", Path(args.path).name)
+            print(f"error: {e}", file=sys.stderr)
+            return 1
         log.info("cli restore-file name=%s count=%d", Path(args.path).name, r.count)
         print(f"{r.dst} (restored {r.count} item(s))")
     elif cmd == "stats":

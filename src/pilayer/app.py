@@ -106,7 +106,9 @@ class Application:
     def _refresh_menu(self):
         if self.icon:
             try:
-                self.icon.update_menu()
+                # 子菜单是 Menu 实例快照：update_menu 只重渲染旧树，
+                # 必须重建整棵描述符才能刷新事件流水（setter 自带 update_menu）
+                self.icon.menu = self._menu()
             except Exception:
                 pass
 

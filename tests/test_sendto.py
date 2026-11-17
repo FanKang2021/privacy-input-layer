@@ -12,8 +12,9 @@ def test_sendto_frozen_uses_exe_native_argv(tmp_path, monkeypatch):
     bat = cli.install_sendto()
     text = bat.read_text(encoding="gbk")
     assert "-m pilayer" not in text
-    assert 'mask-file "%1"' in text
+    assert 'mask-file "%~1"' in text
     assert "pause" in text  # 仅失败时 pause（if errorlevel 1）
+    assert "shift" in text  # 多选文件循环
 
 
 def test_sendto_source_uses_module_argv(tmp_path, monkeypatch):
