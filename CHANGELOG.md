@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.3
+
+### Changed
+- Manual "Check for updates" now opens the latest release page directly when a
+  newer version exists (balloon + browser); startup opt-in check still only
+  balloons, no intrusive browser
+
 ## 0.6.2
 
 ### Changed

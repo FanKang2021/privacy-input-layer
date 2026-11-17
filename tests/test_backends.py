@@ -125,6 +125,20 @@ def test_drag_start_hook_warns():
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="win32 tray only")
+def test_update_manual_opens_release_page(monkeypatch):
+    from pilayer.app import Application
+    a = Application()
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda u: opened.append(u))
+    res = {"latest": "9.9.9", "url": "https://example/release"}
+    a._handle_update_result("newer", res, True)
+    assert opened == ["https://example/release"]
+    opened.clear()
+    a._handle_update_result("newer", res, False)
+    assert opened == []  # 开机 opt-in 不弹浏览器
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 tray only")
 def test_drag_warn_throttled():
     from pilayer.app import Application
     a = Application()

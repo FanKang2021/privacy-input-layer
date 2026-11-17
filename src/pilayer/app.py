@@ -266,7 +266,7 @@ class Application:
             ),
             pystray.MenuItem(lambda item: t("open_config"), lambda: os.startfile(str(self.dir / "config.yaml"))),
             pystray.MenuItem(lambda item: t("open_data"), lambda: os.startfile(str(self.dir))),
-            pystray.MenuItem(lambda item: t("check_updates"), lambda: self._check_update()),
+            pystray.MenuItem(lambda item: t("check_updates"), lambda: self._check_update(manual=True)),
             pystray.MenuItem(
                 lambda item: t("update_available", v=self._update["latest"]),
                 lambda: __import__("webbrowser").open(self._update["url"]),
@@ -276,28 +276,35 @@ class Application:
             pystray.MenuItem(lambda item: t("quit"), self._quit),
         )
 
-    def _check_update(self):
+    def _check_update(self, manual=False):
         from . import updater
-        from . import __version__
 
         def work():
             status, res = updater.check_update()
-            log.info("update check: %s %s", status, res)
-            if status == "newer":
-                self._update = res
-                msg = t("update_available", v=res["latest"])
-            elif status == "current":
-                msg = t("up_to_date", v=__version__)
-            else:
-                msg = t("update_failed")
-            # 手动检查强制反馈，不受静默设置抑制
-            if self.icon:
-                try:
-                    self.icon.notify(msg, "privacy-input-layer")
-                except Exception:
-                    pass
-                self.icon.update_menu()
+            self._handle_update_result(status, res, manual)
         threading.Thread(target=work, daemon=True).start()
+
+    def _handle_update_result(self, status, res, manual):
+        from . import __version__
+        log.info("update check: %s %s", status, res)
+        if status == "newer":
+            self._update = res
+            msg = t("update_available", v=res["latest"])
+            # 手动检查直接跳最新 release 页；开机 opt-in 只气球不弹浏览器
+            if manual and res.get("url"):
+                import webbrowser
+                webbrowser.open(res["url"])
+        elif status == "current":
+            msg = t("up_to_date", v=__version__)
+        else:
+            msg = t("update_failed")
+        # 手动检查强制反馈，不受静默设置抑制
+        if self.icon:
+            try:
+                self.icon.notify(msg, "privacy-input-layer")
+            except Exception:
+                pass
+            self.icon.update_menu()
 
     def _quit(self, icon, item):
         if self.paste_hook:
