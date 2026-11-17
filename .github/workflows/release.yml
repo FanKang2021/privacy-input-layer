@@ -33,6 +33,10 @@ jobs:
           python-version: "3.11"
       - name: Install
         run: pip install -e .[image] pyinstaller
+      - name: Embed build provenance
+        shell: bash
+        run: |
+          printf 'SHA = "%s"\nTIME = "%s"\n' "${GITHUB_SHA}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > src/pilayer/_buildinfo.py
       - name: Build (Windows)
         if: runner.os == 'Windows'
         run: >

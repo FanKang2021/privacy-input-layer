@@ -6,3 +6,4 @@ dist/
 build/
 .pytest_cache/dist/
 build/
+src/pilayer/_buildinfo.py

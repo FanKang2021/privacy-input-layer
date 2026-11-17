@@ -3,6 +3,7 @@
 import ctypes
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -186,6 +187,8 @@ class Application:
 
     def _menu(self):
         return pystray.Menu(
+            pystray.MenuItem(lambda item: self._provenance, None, enabled=False),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem(self._status_text, self._toggle, default=True),
             pystray.MenuItem(self._notify_text, self._toggle_notify),
             pystray.MenuItem(lambda item: t("language"), self._toggle_language),
@@ -259,7 +262,17 @@ class Application:
             level=logging.INFO,
             format="%(asctime)s %(name)s %(levelname)s %(message)s",
         )
-        log.info("guard starting, mode=%s", self.cfg["guard"].get("mode", "focus"))
+        from . import __version__
+        try:
+            from . import _buildinfo
+            build = f"{_buildinfo.SHA[:7]} {_buildinfo.TIME}"
+        except Exception:
+            build = "dev"
+        frozen = getattr(sys, "frozen", False)
+        self._provenance = f"v{__version__} · {build} · {'binary' if frozen else 'source'}"
+        log.info("guard starting v%s build=%s frozen=%s exe=%s mode=%s",
+                 __version__, build, frozen, sys.executable,
+                 self.cfg["guard"].get("mode", "focus"))
         # 单实例：重复启动时静默退出，避免两个守卫互相改写剪贴板
         kernel32 = ctypes.windll.kernel32
         self._mutex = kernel32.CreateMutexW(None, False, "PilayerSingleInstance")
@@ -267,6 +280,6 @@ class Application:
             log.info("another instance running, exit")
             return
         self.icon = pystray.Icon(
-            "pilayer", _icon_image(True), "privacy-input-layer", menu=self._menu()
+            "pilayer", _icon_image(True), f"privacy-input-layer v{__version__}", menu=self._menu()
         )
         self.icon.run(setup=self._setup)

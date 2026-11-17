@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.10
+
+### Added
+- Tray provenance: tooltip + menu header show version, build sha/time and
+  binary/source; startup log records the same plus exe path (stale-build
+  incidents now self-evident); CLI --version; release workflow embeds build sha
+
 ## 0.4.9
 
 ### Added

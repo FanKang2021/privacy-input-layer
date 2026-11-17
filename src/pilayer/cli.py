@@ -20,6 +20,8 @@ def main(argv=None):
         prog="pilayer",
         description="Privacy input layer for AI: mask content before it enters any AI client, 100% local",
     )
+    from . import __version__
+    parser.add_argument("--version", action="version", version=f"pilayer {__version__}")
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("run", help="start the tray guard (default)")
     p = sub.add_parser("mask-text", help="mask a text string and print it")
