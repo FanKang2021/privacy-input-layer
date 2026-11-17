@@ -36,15 +36,13 @@ def test_handle_drop_masks_and_calls_on_masked(tmp_path, monkeypatch):
     assert "[PHONE_" in Path(paths[0]).read_text(encoding="utf-8")
 
 
-def test_relay_writes_hdrop_and_resends(monkeypatch):
+def test_zone_masked_puts_copies_on_clipboard_no_autosend(monkeypatch):
     from pilayer.app import Application
     a = Application()
     wrote = []
     resent = []
     monkeypatch.setattr(a.watcher, "_write_hdrop", lambda p: wrote.append(p))
-    a.focus = SimpleNamespace(last_ai_hwnd=123)
     a.paste_hook = SimpleNamespace(_resend=lambda *args: resent.append(args))
-    monkeypatch.setattr("ctypes.windll.user32.SetForegroundWindow", lambda h: True)
     a._on_zone_masked(["C:\\x.masked.txt"])
     assert wrote == [["C:\\x.masked.txt"]]
-    assert resent and resent[0][0] == 0x56
+    assert resent == []  # 不自动猜目标窗口，多窗口下会送错

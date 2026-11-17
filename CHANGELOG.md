@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1
+
+### Fixed
+- Drop zone auto-relay guessed the wrong target window when several AI windows
+  are open (mis-sent to Qoder); now puts masked copies on the clipboard and
+  prompts Ctrl+V in the target window — no auto-send, no misfire. Removed
+  guard.drop_zone_relay
+
 ## 0.6.0
 
 ### Added

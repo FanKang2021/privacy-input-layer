@@ -45,8 +45,7 @@ STRINGS = {
         "drag_warn": "Drag & drop bypasses the guard (OLE). Files: right-click > Send to > Masked copy, then drag the copy. Text: use Ctrl+V.",
         "zone_on": "Drop zone: on",
         "zone_off": "Drop zone: off",
-        "zone_sent": "Masked {n} file(s) -> sent to the AI window",
-        "zone_masked": "Masked {n} file(s) -> {dir} (drag the copies)",
+        "zone_ready": "Masked {n} copy(ies) on clipboard - press Ctrl+V in the target AI window",
     },
     "zh": {
         "guard_on": "守卫：开启",
@@ -90,8 +89,7 @@ STRINGS = {
         "drag_warn": "拖拽不经过守卫（OLE 通道）。文件请右键→发送到→Masked copy 后拖副本；文本请用 Ctrl+V。",
         "zone_on": "脱敏浮窗：开",
         "zone_off": "脱敏浮窗：关",
-        "zone_sent": "已脱敏 {n} 个文件→已送入 AI 窗口",
-        "zone_masked": "已脱敏 {n} 个文件→{dir}（拖副本）",
+        "zone_ready": "已脱敏 {n} 个副本在剪贴板——到目标 AI 窗口按 Ctrl+V 粘贴",
     },
 }
 

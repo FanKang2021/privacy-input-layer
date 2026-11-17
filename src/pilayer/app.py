@@ -200,17 +200,10 @@ class Application:
         self.notify("privacy-input-layer", t("sendto_done", path=bat))
 
     def _on_zone_masked(self, paths):
-        """浮窗脱敏后中继：剪贴板 HDROP 换副本 + 补发 Ctrl+V 到最近 AI 窗口。"""
+        """浮窗脱敏后副本上剪贴板；自动猜目标窗口会送错（曾误送 Qoder），
+        改为提示用户到目标 AI 窗口按 Ctrl+V，一次粘贴即达、不送错。"""
         self.watcher._write_hdrop(paths)
-        target = self.focus.last_ai_hwnd if self.focus else None
-        if target and self.cfg["guard"].get("drop_zone_relay", True) and self.paste_hook:
-            ctypes.windll.user32.SetForegroundWindow(target)
-            time.sleep(0.15)
-            self.paste_hook._resend(0x56, True, False)
-            self.notify("privacy-input-layer", t("zone_sent", n=len(paths)))
-        else:
-            os.startfile(str(self.watcher.copies_dir))
-            self.notify("privacy-input-layer", t("zone_masked", n=len(paths), dir=self.watcher.copies_dir))
+        self.notify("privacy-input-layer", t("zone_ready", n=len(paths)))
 
     def _toggle_dropzone(self, icon, item):
         cur = self.cfg["guard"].get("drop_zone", True)
