@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.11
+
+### Changed
+- Restore direction default flipped to one-shot clipboard paste (instant,
+  original format — fixes slow per-char Notepad paste); privacy mode
+  paste_injection=true kept as opt-in (clipboard-free, per-char)
+- Injection newlines converted to CRLF so host format is preserved
+
+### Added
+- Update check: tray manual "Check for updates" + opt-in guard.update_check
+  (default off, zero-network by default); compares GitHub releases, notifies and
+  opens Releases page, never downloads
+
 ## 0.4.10
 
 ### Added

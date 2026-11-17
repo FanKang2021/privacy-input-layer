@@ -42,7 +42,7 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 
 不想开终端：双击项目根目录的 `start-guard.bat`（无控制台窗口）。
 
-托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**模式 focus/always**、**开机自启**、**最近脱敏**（审计，不含原文）、**立即还原剪贴板**、打开配置、打开数据目录、退出。
+托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**模式 focus/always**、**开机自启**、**最近脱敏**（审计，不含原文）、**立即还原剪贴板**、**检查更新**（手动；`update_check` 可 opt-in 自动）、打开配置、打开数据目录、退出。
 
 预构建产物见 [Releases](https://github.com/FanKang2021/privacy-input-layer/releases)（Windows / macOS-arm64 / Linux-x86_64）。
 
@@ -115,7 +115,7 @@ pilayer stats                                  # 本地映射统计
 
 **竞态关闭与剪贴板卫生**：前台切换立即重新评估；300ms 轮询捕捉浏览器内换 tab 与标题变化。低级键盘钩子拦截 Ctrl+V / Shift+Insert（吞掉孤儿 keyup、自适应补发，宿主修饰键 latch 不紊乱）：
 - **掩码方向**（进 AI）：掩码文本上剪贴板并补发真实粘贴，**分块**（`paste_chunk_size` 默认 400 字 / `paste_chunk_delay_ms` 40ms）摊销宿主大输入渲染成本；剪贴板只持有掩码态。
-- **还原方向**（出 AI）：物理修饰键释放后经 SendInput 注入明文，明文不进剪贴板 / Win+V 历史 / 云同步（`paste_injection: true`；`false` = 一次性剪贴板路径，承担该 trade-off）。
+- **还原方向**（出 AI）：默认剪贴板一次性写入 + 真实粘贴（即时、原格式；明文短暂在剪贴板）。隐私模式 `paste_injection: true` 在物理修饰键释放后 SendInput 注入，明文不进剪贴板 / Win+V / 云同步（较慢、逐字渲染）。
 签名扫描缓存 5s 控制开销。
 
 `guard.mode: always` 可切回全局常开模式。
@@ -124,7 +124,7 @@ pilayer stats                                  # 本地映射统计
 
 `%APPDATA%/pilayer/config.yaml`（首次运行自动生成，模板见 [config.example.yaml](config.example.yaml)）：
 
-- `guard.*`：mode、文本/图片/文件开关、auto_restore、notify、auto_detect、paste_hook、paste_injection、paste_chunk_size、paste_chunk_delay_ms、lazy_restore
+- `guard.*`：mode、文本/图片/文件开关、auto_restore、notify、auto_detect、paste_hook、paste_injection、paste_chunk_size、paste_chunk_delay_ms、lazy_restore、update_check
 - `rules.*`：各规则开关 + `custom_keywords`（人名、项目代号等）
 - `ai_targets.*`：兜底识别名单
 - `image.min_score` / `image.fill`：OCR 置信度阈值与打码颜色
@@ -146,7 +146,8 @@ pilayer stats                                  # 本地映射统计
 
 - **静态加密**：映射原文以 Windows DPAPI（当前用户密钥）列级加密存 sqlite，满足 PCI DSS 3.4 / ASVS V8；旧明文行首次启动自动迁移；去重走 sha256 哈希列，不解密全表。
 - **存储限制**：映射按 `store.ttl_days`（默认 30 天）自动过期清理，手动 `pilayer purge`（GDPR art 5(1)(e)）。
-- **懒还原 + 注入**：离开 AI 客户端**不**主动把明文写回共享剪贴板（剪贴板历史/远桌/恶意软件可读）；按需经粘贴时注入还原，或 `paste_injection: false` 时在非 AI 处复制占位符文本还原。代价：非 AI 处菜单/右键粘贴得到占位符；`lazy_restore: false` 可恢复旧的主动还原。
+- **懒还原**：离开 AI 客户端**不**主动把明文写回共享剪贴板；按需于粘贴时还原（默认剪贴板一次性；`paste_injection: true` 为剪贴板零明文注入）。代价：非 AI 处菜单/右键粘贴得到占位符；`lazy_restore: false` 可恢复旧的主动还原。
+- **网络**：默认零请求；可选检查更新（`guard.update_check` 或托盘手动"检查更新"）仅访问 GitHub releases API，不下载。
 - **日志脱敏**：`pilayer.log` 只记进程名与签名种类，不记窗口标题/URL/控件原文（OWASP Logging Cheat Sheet）。
 - **规则基线**：校验位/Luhn、URI userinfo 密码、PGP/PEM 块、厂商令牌族、赋值型密钥（裸值取整行无截断残留）、内网 URL；可选高熵规则（`rules.entropy`，默认关）。过掩为安全方向。
 - **占位符 linkage**：同一原文跨会话复用同占位符，AI 理论上可关联对话；为上下文一致性接受的 trade-off，purge 可重置。

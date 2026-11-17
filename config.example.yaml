@@ -10,10 +10,11 @@ guard:
   notify: true              # tray balloon notifications (also toggleable from tray menu)
   auto_detect: true         # zero-config UI signature detection (model picker / AI disclaimer / chat input)
   paste_hook: true          # Ctrl+V / Shift+Insert instant clipboard compensation (closes switch-to-paste race)
-  paste_injection: true     # restore-direction: inject plaintext via SendInput (never on clipboard); false = one-shot clipboard path (plaintext transient trade-off)
+  paste_injection: false    # false = one-shot clipboard restore (instant, original format; plaintext transient on clipboard); true = privacy mode: inject plaintext via SendInput, never on clipboard (slower, per-char)
   paste_chunk_size: 400     # mask-direction chunked paste chars per block (0 = one-shot); amortizes host render stutter
   paste_chunk_delay_ms: 40  # delay between chunks
   lazy_restore: true        # do NOT write plaintext back to clipboard on leaving AI; restore on demand (Ctrl+V / copy event)
+  update_check: false       # opt-in: check GitHub releases on startup (network only when enabled or manual menu check)
 
 # AI client identification for focus mode: zero-config signatures first, these lists as fallback/override
 ai_targets:

@@ -141,3 +141,15 @@ def test_large_mask_paste_chunked(tmp_path, monkeypatch):
     w.drain_injection()
     assert calls and state["text"] != first
     assert len(state["text"]) == 400
+
+
+def test_default_restore_one_shot_clipboard(tmp_path, monkeypatch):
+    w, state, sent = make_watcher(tmp_path, monkeypatch, ai=False, injection=False)
+    state["text"] = "call 13800138000"
+    w.ai_focused = True
+    w.handle_paste()
+    masked = state["text"]
+    w.ai_focused = False
+    assert w.handle_paste() is False  # worker 补发真实 Ctrl+V，一次性原格式
+    assert state["text"] == "call 13800138000"
+    assert sent == []

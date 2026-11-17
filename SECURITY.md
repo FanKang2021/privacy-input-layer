@@ -11,14 +11,17 @@ acknowledge within 72 hours and to publish a fix + advisory for confirmed issues
 
 ## Security model & guarantees
 
-- **No network activity.** The tool makes zero network requests; OCR runs locally.
+- **No network by default.** The tool makes zero network requests unless the
+  user opts in (`guard.update_check`) or manually triggers "Check for updates",
+  which contacts only the GitHub releases API. OCR runs locally.
 - **Originals stay on this machine.** Mapping originals are stored DPAPI-encrypted
   (current-user key) in `%APPDATA%/pilayer/mappings.db`; legacy plaintext rows are
   migrated on first start.
-- **Clipboard never holds our plaintext** (default `paste_injection: true`): paste
-  text is injected via SendInput; the clipboard only ever contains the user's own
-  copies or masked placeholders. This closes Windows clipboard-history (Win+V) and
-  cloud-clipboard sync exposure for restored values.
+- **Clipboard plaintext exposure is opt-out-able**: default restore is a one-shot
+  clipboard write (instant, original format; plaintext transiently on clipboard,
+  readable by clipboard history / cloud sync). Privacy-priority users set
+  `paste_injection: true`: restored plaintext is injected via SendInput and never
+  touches the clipboard (slower, per-char rendering).
 - **Logs contain no secrets**: only process names, signature kinds and counts.
 - **No keylogging**: the keyboard hook inspects only paste key combinations.
 - **Storage limitation**: mappings and masked copies purge after `store.ttl_days`.

@@ -50,8 +50,8 @@ _user32.SendInput.restype = ctypes.c_uint
 
 
 def send_unicode(text: str) -> bool:
-    """以 UTF-16 code unit 逐字符注入（含代理对），不经过剪贴板。"""
-    units = text.encode("utf-16-le")
+    """以 UTF-16 code unit 逐字符注入（含代理对）；换行转 \r\n 保宿主格式。"""
+    units = text.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-16-le")
     events = []
     for i in range(0, len(units), 2):
         code = units[i] | (units[i + 1] << 8)

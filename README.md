@@ -42,7 +42,7 @@ pilayer install-sendto        # optional: right-click "Send to -> Masked copy"
 
 No terminal needed: double-click `start-guard.bat` in the project root (no console window).
 
-Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **mode focus/always**, **Start with Windows**, **Recent masks** (audit, no secrets), **Restore clipboard now**, open config, open data dir, quit.
+Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **mode focus/always**, **Start with Windows**, **Recent masks** (audit, no secrets), **Restore clipboard now**, **Check for updates** (manual; opt-in auto via `update_check`), open config, open data dir, quit.
 
 Prebuilt binaries: see [Releases](https://github.com/FanKang2021/privacy-input-layer/releases) (Windows / macOS-arm64 / Linux-x86_64).
 
@@ -120,7 +120,7 @@ With `guard.mode: focus` the clipboard is masked only while an AI conversation c
 
 **Race closure & clipboard hygiene**: foreground changes re-evaluate immediately; a 300 ms poll catches in-browser tab switches and title changes. A low-level keyboard hook intercepts Ctrl+V / Shift+Insert (swallowing the orphan keyup and re-sending adaptively so host modifier latches never break):
 - **Mask direction** (into AI): masked text goes to the clipboard and the real paste is re-sent, **chunked** (`paste_chunk_size`, default 400 chars / `paste_chunk_delay_ms` 40 ms) to amortize host rendering of huge inputs; clipboard holds only masked text.
-- **Restore direction** (outside AI): plaintext is injected via SendInput after physical modifiers release, so it never touches the clipboard / Win+V history / cloud sync (`paste_injection: true`; `false` = one-shot clipboard path with that trade-off).
+- **Restore direction** (outside AI): default one-shot clipboard write + real paste (instant, original format; plaintext transiently on clipboard). Privacy mode `paste_injection: true` injects via SendInput after physical modifiers release so plaintext never touches clipboard / Win+V / cloud sync (slower, per-char).
 Signature scans are cached 5 s to bound overhead.
 
 `guard.mode: always` switches back to global always-on masking.
@@ -129,7 +129,7 @@ Signature scans are cached 5 s to bound overhead.
 
 `%APPDATA%/pilayer/config.yaml` (auto-created; template in [config.example.yaml](config.example.yaml)):
 
-- `guard.*`: mode, text/image/hdrop switches, auto_restore, notify, auto_detect, paste_hook, paste_injection, paste_chunk_size, paste_chunk_delay_ms, lazy_restore
+- `guard.*`: mode, text/image/hdrop switches, auto_restore, notify, auto_detect, paste_hook, paste_injection, paste_chunk_size, paste_chunk_delay_ms, lazy_restore, update_check
 - `rules.*`: per-rule switches + `custom_keywords` (names, project codenames, …)
 - `ai_targets.*`: fallback identification lists
 - `image.min_score` / `image.fill`: OCR threshold and mask color
@@ -151,7 +151,8 @@ Reviewed against gitleaks/detect-secrets baselines, OWASP ASVS V8 & Logging Chea
 
 - **Encrypted at rest**: mapping originals are stored DPAPI-encrypted (current-user key) in sqlite — PCI DSS 3.4 / ASVS V8. Legacy plaintext rows are migrated automatically on first start. Dedup uses a sha256 column, never decrypting the table.
 - **Storage limitation**: mappings auto-purge after `store.ttl_days` (default 30); manual `pilayer purge` (GDPR art 5(1)(e)).
-- **Lazy restore + injection**: leaving an AI client does NOT write plaintext back to the shared clipboard (clipboard history / RDP / malware can read it). Restoration happens on demand via paste-time injection, or copying placeholder text outside AI when `paste_injection: false`. Trade-off: menu/right-click paste outside AI yields placeholders; set `lazy_restore: false` for the old proactive behavior.
+- **Lazy restore**: leaving an AI client does NOT proactively write plaintext back to the shared clipboard; restoration happens on demand at paste (default one-shot clipboard; `paste_injection: true` for clipboard-free injection). Trade-off: menu/right-click paste outside AI yields placeholders; set `lazy_restore: false` for the old proactive behavior.
+- **Network**: zero requests by default; optional update check (`guard.update_check` or manual tray "Check for updates") contacts only the GitHub releases API and never downloads.
 - **Log redaction**: `pilayer.log` records only process names and signature kinds — never window titles, URLs or control text (OWASP Logging Cheat Sheet).
 - **Rule baseline**: checksum/Luhn validation, URI userinfo passwords, PGP/PEM blocks, vendor token families, assignment-style secrets (whole-line bare values, no truncation residue), internal URLs; optional high-entropy rule (`rules.entropy`, off by default). Over-masking is the safe direction.
 - **Placeholder linkage**: the same original reuses the same placeholder across sessions, so an AI could correlate conversations. Accepted trade-off for context consistency; purge resets it.

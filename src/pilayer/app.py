@@ -4,6 +4,7 @@ import ctypes
 import logging
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -66,6 +67,7 @@ class Application:
             self.paste_hook = PasteHook(self.watcher.handle_paste, self.watcher.drain_injection)
             self.watcher.resend_cb = lambda: self.paste_hook._resend(*self.paste_hook._last_combo)
         self.icon = None
+        self._update = None
 
     def _on_learn(self, proc: str):
         learned = self.cfg.setdefault("ai_targets", {}).setdefault("learned_processes", [])
@@ -204,9 +206,30 @@ class Application:
             ),
             pystray.MenuItem(lambda item: t("open_config"), lambda: os.startfile(str(self.dir / "config.yaml"))),
             pystray.MenuItem(lambda item: t("open_data"), lambda: os.startfile(str(self.dir))),
+            pystray.MenuItem(lambda item: t("check_updates"), lambda: self._check_update()),
+            pystray.MenuItem(
+                lambda item: t("update_available", v=self._update["latest"]),
+                lambda: __import__("webbrowser").open(self._update["url"]),
+                visible=lambda item: bool(self._update),
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(lambda item: t("quit"), self._quit),
         )
+
+    def _check_update(self):
+        from . import updater
+        from . import __version__
+
+        def work():
+            res = updater.check_update()
+            if res:
+                self._update = res
+                self.notify("privacy-input-layer", t("update_available", v=res["latest"]))
+            else:
+                self.notify("privacy-input-layer", t("up_to_date", v=__version__))
+            if self.icon:
+                self.icon.update_menu()
+        threading.Thread(target=work, daemon=True).start()
 
     def _quit(self, icon, item):
         if self.paste_hook:
@@ -229,6 +252,8 @@ class Application:
             self.paste_hook.start()
         if self.focus:
             self.focus.start()
+        if self.cfg["guard"].get("update_check", False):
+            self._check_update()
 
     def _promote_tray_icon(self) -> bool:
         # Win11 默认隐藏新托盘图标（IsPromoted 空），只提升本应用自己的条目

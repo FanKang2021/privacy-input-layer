@@ -16,10 +16,11 @@ DEFAULTS = {
         "notify": True,
         "auto_detect": True,
         "paste_hook": True,
-        "paste_injection": True,
+        "paste_injection": False,
         "paste_chunk_size": 400,
         "paste_chunk_delay_ms": 40,
         "lazy_restore": True,
+        "update_check": False,
     },
     "ai_targets": {
         "processes": [
