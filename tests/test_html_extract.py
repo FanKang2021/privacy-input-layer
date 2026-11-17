@@ -41,7 +41,7 @@ def test_html_only_clipboard_normalized(tmp_path, monkeypatch):
     monkeypatch.setattr(win32clipboard, "SetClipboardData", lambda f, d: state.update(text=d))
     monkeypatch.setattr(win32clipboard, "GetClipboardData", lambda f: html)
     monkeypatch.setattr(win32clipboard, "IsClipboardFormatAvailable",
-                        lambda f: f == win32con.CF_HTML)
+                        lambda f: f == __import__("pilayer.clipboard.watcher", fromlist=["CF_HTML"]).CF_HTML)
     monkeypatch.setattr(win32clipboard, "GetClipboardSequenceNumber", lambda: 1)
     store = MappingStore(tmp_path / "m.db")
     w = ClipboardWatcher(TextMasker(store, {"phone": True}, []), ImageMasker({}),

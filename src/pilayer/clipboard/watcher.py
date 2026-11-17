@@ -36,6 +36,9 @@ WM_CLIPBOARDUPDATE = 0x031D
 
 log = logging.getLogger("pilayer.clipboard")
 
+# HTML Format 是注册格式，win32con 无此常量
+CF_HTML = win32clipboard.RegisterClipboardFormat("HTML Format")
+
 
 class _TextExtractor(HTMLParser):
     def __init__(self):
@@ -234,7 +237,7 @@ class ClipboardWatcher:
     def _text_available(self) -> bool:
         return (
             win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT)
-            or win32clipboard.IsClipboardFormatAvailable(win32con.CF_HTML)
+            or win32clipboard.IsClipboardFormatAvailable(CF_HTML)
         )
 
     def _read_text(self, fast: bool = False) -> str | None:
@@ -245,8 +248,8 @@ class ClipboardWatcher:
             if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
                 text = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
                 return text if isinstance(text, str) else None
-            if win32clipboard.IsClipboardFormatAvailable(win32con.CF_HTML):
-                return html_to_text(win32clipboard.GetClipboardData(win32con.CF_HTML))
+            if win32clipboard.IsClipboardFormatAvailable(CF_HTML):
+                return html_to_text(win32clipboard.GetClipboardData(CF_HTML))
             return None
         except Exception:
             return None
@@ -269,13 +272,13 @@ class ClipboardWatcher:
         """源应用只放 CF_HTML 时宿主自解 HTML 会丢换行；归一化为 unicode 纯文本。"""
         if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
             return
-        if not win32clipboard.IsClipboardFormatAvailable(win32con.CF_HTML):
+        if not win32clipboard.IsClipboardFormatAvailable(CF_HTML):
             return
         opened = self._open()
         if not opened:
             return
         try:
-            raw = win32clipboard.GetClipboardData(win32con.CF_HTML)
+            raw = win32clipboard.GetClipboardData(CF_HTML)
         except Exception:
             return
         finally:
