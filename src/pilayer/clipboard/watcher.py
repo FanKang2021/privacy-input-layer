@@ -46,7 +46,7 @@ class _TextExtractor(HTMLParser):
         self.parts.append(data)
 
     def handle_starttag(self, tag, attrs):
-        if tag in ("br", "p", "div", "li", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6"):
+        if tag == "br":
             self.parts.append("\n")
 
     def handle_endtag(self, tag):
