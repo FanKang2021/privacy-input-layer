@@ -79,6 +79,7 @@ def test_config_migration_old_injection_default(tmp_path):
     assert load_config(p)["guard"]["paste_injection"] is True
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 tray/watcher only")
 def test_recent_submenu_dynamic():
     from pilayer.app import Application
     a = Application()
@@ -95,6 +96,7 @@ def test_recent_submenu_dynamic():
     assert any("masked 3" in (t if isinstance(t, str) else "") for t in texts2)
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 tray/watcher only")
 def test_events_hook_fires(tmp_path):
     from pilayer.clipboard.watcher import ClipboardWatcher
     from pilayer.engine import MappingStore, TextMasker
