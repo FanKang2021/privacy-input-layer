@@ -221,13 +221,21 @@ class Application:
         from . import __version__
 
         def work():
-            res = updater.check_update()
-            if res:
+            status, res = updater.check_update()
+            log.info("update check: %s %s", status, res)
+            if status == "newer":
                 self._update = res
-                self.notify("privacy-input-layer", t("update_available", v=res["latest"]))
+                msg = t("update_available", v=res["latest"])
+            elif status == "current":
+                msg = t("up_to_date", v=__version__)
             else:
-                self.notify("privacy-input-layer", t("up_to_date", v=__version__))
+                msg = t("update_failed")
+            # 手动检查强制反馈，不受静默设置抑制
             if self.icon:
+                try:
+                    self.icon.notify(msg, "privacy-input-layer")
+                except Exception:
+                    pass
                 self.icon.update_menu()
         threading.Thread(target=work, daemon=True).start()
 

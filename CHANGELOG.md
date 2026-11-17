@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.12
+
+### Fixed
+- Manual update check always gives tray feedback (bypasses silent mode) and
+  distinguishes newer / current / error (previously error and current both
+  silent); check result logged
+
 ## 0.4.11
 
 ### Changed
