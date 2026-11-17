@@ -22,6 +22,7 @@ DEFAULTS = {
         "lazy_restore": True,
         "drag_warn": True,
         "drop_zone": True,
+        "drop_zone_auto": True,
         "update_check": False,
     },
     "ai_targets": {

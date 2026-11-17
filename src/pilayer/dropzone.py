@@ -19,6 +19,8 @@ if sys.platform == "win32":
 log = logging.getLogger("pilayer.dropzone")
 
 WM_DROPFILES = 0x0233
+WM_APP_SHOW = 0x8001
+WM_APP_HIDE = 0x8002
 _user32 = ctypes.windll.user32 if sys.platform == "win32" else None
 _shell32 = ctypes.windll.shell32 if sys.platform == "win32" else None
 
@@ -43,12 +45,14 @@ class DropZone:
         self._proc = None
         self._status = "拖文件到此脱敏"
         self._visible = False
+        self._stopping = False
 
     def start(self):
         self._thread = threading.Thread(target=self._run, name="pilayer-dropzone", daemon=True)
         self._thread.start()
 
     def stop(self):
+        self._stopping = True
         if self._hwnd:
             try:
                 win32gui.PostMessage(self._hwnd, win32con.WM_CLOSE, 0, 0)
@@ -66,6 +70,14 @@ class DropZone:
         if self._hwnd:
             win32gui.ShowWindow(self._hwnd, win32con.SW_HIDE)
             self._visible = False
+
+    def request_show(self):
+        if self._hwnd:
+            win32gui.PostMessage(self._hwnd, WM_APP_SHOW, 0, 0)
+
+    def request_hide(self):
+        if self._hwnd:
+            win32gui.PostMessage(self._hwnd, WM_APP_HIDE, 0, 0)
 
     def _run(self):
         pythoncom.CoInitialize()
@@ -86,8 +98,8 @@ class DropZone:
                 0, 0, wc.hInstance, None,
             )
             _shell32.DragAcceptFiles(self._hwnd, True)
-            win32gui.ShowWindow(self._hwnd, win32con.SW_SHOW)
-            self._visible = True
+            win32gui.ShowWindow(self._hwnd, win32con.SW_HIDE)
+            self._visible = False
             log.info("dropzone window created hwnd=%s", self._hwnd)
             win32gui.PumpMessages()
         except Exception as e:
@@ -115,8 +127,21 @@ class DropZone:
             _user32.ReleaseCapture()
             _user32.SendMessageW(hwnd, win32con.WM_NCLBUTTONDOWN, 2, 0)  # HTCAPTION 拖动
             return 0
+        if msg == WM_APP_SHOW:
+            win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+            self._visible = True
+            return 0
+        if msg == WM_APP_HIDE:
+            win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
+            self._visible = False
+            return 0
         if msg == win32con.WM_CLOSE:
-            win32gui.DestroyWindow(hwnd)
+            # 手动 X 仅隐藏（可再开）；stop() 置 _stopping 才真正销毁
+            if self._stopping:
+                win32gui.DestroyWindow(hwnd)
+            else:
+                win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
+                self._visible = False
             return 0
         if msg == win32con.WM_DESTROY:
             win32gui.PostQuitMessage(0)

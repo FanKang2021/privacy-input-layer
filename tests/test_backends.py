@@ -79,29 +79,26 @@ def test_config_migration_old_injection_default(tmp_path):
     assert load_config(p)["guard"]["paste_injection"] is True
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="win32 tray/watcher only")
-def test_recent_submenu_dynamic():
-    from pilayer.app import Application
-    a = Application()
-    a.watcher.events.appendleft("12:00:00 masked 2 (SECRET)")
-    menu = a._menu()
-    # pystray 子菜单只认 Menu 实例；callable action 是点击回调（v0.5.2 前误用）
-    recent = [i for i in menu.items if i.submenu][0]
-    texts = [(i.text(None) if callable(i.text) else i.text) for i in recent.submenu.items]
-    assert any("masked 2" in (t if isinstance(t, str) else "") for t in texts)
-    a.watcher.events.appendleft("12:00:01 masked 3 (PHONE)")
-    menu2 = a._menu()
-    recent2 = [i for i in menu2.items if i.submenu][0]
-    texts2 = [(i.text(None) if callable(i.text) else i.text) for i in recent2.submenu.items]
-    assert any("masked 3" in (t if isinstance(t, str) else "") for t in texts2)
-    # 事件 hook 须重建整棵菜单（子菜单快照否则永远空）
-    from types import SimpleNamespace
-    a.icon = SimpleNamespace()
-    a.watcher.events.appendleft("12:00:02 masked 4 (IP)")
-    a._refresh_menu()
-    recent3 = [i for i in a.icon.menu.items if i.submenu][0]
-    texts3 = [(i.text(None) if callable(i.text) else i.text) for i in recent3.submenu.items]
-    assert any("masked 4" in (t if isinstance(t, str) else "") for t in texts3)
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 mouse hook only")
+def test_drag_gesture_fires_show_hide_callbacks():
+    import ctypes as c
+    from pilayer.focus import ForegroundWatcher, MSLLHOOKSTRUCT
+    starts, ends = [], []
+    w = ForegroundWatcher({}, lambda ai: None,
+                          on_drag_start=lambda: starts.append(1),
+                          on_drag_end=lambda: ends.append(1))
+
+    def ev(x, y):
+        m = MSLLHOOKSTRUCT()
+        m.pt.x, m.pt.y = x, y
+        return c.byref(m)
+
+    w._mouse_cb(0, 0x0201, ev(0, 0))
+    w._mouse_cb(0, 0x0200, ev(60, 60))
+    w._mouse_cb(0, 0x0200, ev(80, 80))
+    assert starts == [1]  # 越过阈值只触发一次
+    w._mouse_cb(0, 0x0202, ev(80, 80))
+    assert ends == [1]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="win32 tray/watcher only")

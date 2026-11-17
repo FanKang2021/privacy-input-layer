@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.2
+
+### Changed
+- Drop zone auto-shows while a drag gesture is in progress and hides ~1.2s
+  after release/drop (`guard.drop_zone_auto`); closing with X only hides it so
+  it can reappear (previously X destroyed the window permanently)
+- Simplified tray: removed "Mask file…" (redundant with SendTo, dialog broken)
+  and "Recent masks" (low value; logs cover audit). Kept SendTo install entry
+  (covers file-picker uploads) and drop zone toggle
+
 ## 0.6.1
 
 ### Fixed

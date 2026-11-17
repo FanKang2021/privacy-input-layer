@@ -237,10 +237,13 @@ def ai_ui_signature(hwnd) -> str | None:
 
 
 class ForegroundWatcher:
-    def __init__(self, cfg: dict, on_change, on_drag=None):
+    def __init__(self, cfg: dict, on_change, on_drag=None,
+                 on_drag_start=None, on_drag_end=None):
         self.cfg = cfg
         self.on_change = on_change
         self.on_drag = on_drag
+        self.on_drag_start = on_drag_start
+        self.on_drag_end = on_drag_end
         self._stop = threading.Event()
         self._state = None
         self._hook = None
@@ -393,16 +396,28 @@ class ForegroundWatcher:
             ms = ctypes.cast(lparam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
             x, y = ms.pt.x, ms.pt.y
             if wparam == WM_LBUTTONDOWN:
-                self._drag_track = [self._root_at(x, y), x, y, time.time(), 0]
+                self._drag_track = [self._root_at(x, y), x, y, time.time(), 0, 0]
             elif wparam == WM_MOUSEMOVE and self._drag_track:
                 t = self._drag_track
                 t[4] += abs(x - t[1]) + abs(y - t[2])
                 t[1], t[2] = x, y
+                if t[4] > 32 and not t[5]:
+                    t[5] = 1
+                    if self.on_drag_start:
+                        try:
+                            self.on_drag_start()
+                        except Exception:
+                            pass
             elif wparam == WM_LBUTTONUP and self._drag_track:
                 t = self._drag_track
                 self._drag_track = None
                 if time.time() - t[3] > 0.2 and t[4] > 32:
                     self._drag_candidate = (t[0], self._root_at(x, y))
+                if self.on_drag_end:
+                    try:
+                        self.on_drag_end()
+                    except Exception:
+                        pass
         return _user32.CallNextHookEx(self._mouse_hook, ncode, wparam, lparam)
 
     def _evaluate_drag(self, cand):

@@ -56,12 +56,13 @@ class Application:
             self.masker, self.image_masker, self.cfg["guard"],
             self.dir / "copies", self.cfg["files"]["suffix"],
             notify=self.notify, on_learn=self._on_learn, ai_cfg=self.cfg,
-            on_event=self._refresh_menu,
         )
         self.focus = None
         if self.cfg["guard"].get("mode", "focus") == "focus":
             from .focus import ForegroundWatcher
-            self.focus = ForegroundWatcher(self.cfg, self._on_focus, on_drag=self._on_drag)
+            self.focus = ForegroundWatcher(self.cfg, self._on_focus, on_drag=self._on_drag,
+                                  on_drag_start=self._zone_auto_show,
+                                  on_drag_end=self._zone_auto_hide)
         self.paste_hook = None
         if self.cfg["guard"].get("paste_hook", True):
             from .clipboard.paste_hook import PasteHook
@@ -74,6 +75,7 @@ class Application:
         )
         self.icon = None
         self._update = None
+        self._zone_hide_timer = None
 
     def _on_learn(self, proc: str):
         learned = self.cfg.setdefault("ai_targets", {}).setdefault("learned_processes", [])
@@ -105,15 +107,6 @@ class Application:
         if self.cfg["guard"].get("notify") and self.icon:
             try:
                 self.icon.notify(msg, title)
-            except Exception:
-                pass
-
-    def _refresh_menu(self):
-        if self.icon:
-            try:
-                # 子菜单是 Menu 实例快照：update_menu 只重渲染旧树，
-                # 必须重建整棵描述符才能刷新事件流水（setter 自带 update_menu）
-                self.icon.menu = self._menu()
             except Exception:
                 pass
 
@@ -175,20 +168,9 @@ class Application:
         self._set_autostart(not self._autostart_enabled())
         icon.update_menu()
 
-    def _recent_menu(self):
-        entries = list(self.watcher.events)[:5]
-        if not entries:
-            return pystray.Menu(pystray.MenuItem(lambda item: t("recent_empty"), None, enabled=False))
-        return pystray.Menu(*[
-            pystray.MenuItem(lambda item, s=s: s, None, enabled=False) for s in entries
-        ])
-
     def _restore_now(self, icon, item):
         msg = self.watcher._restore_text_current()
         self.notify("privacy-input-layer", msg or t("nothing_restore"))
-
-    def _mask_files(self, icon, item):
-        threading.Thread(target=self._mask_files_work, daemon=True).start()
 
     def _install_sendto(self, icon, item):
         from .cli import install_sendto
@@ -204,96 +186,35 @@ class Application:
         改为提示用户到目标 AI 窗口按 Ctrl+V，一次粘贴即达、不送错。"""
         self.watcher._write_hdrop(paths)
         self.notify("privacy-input-layer", t("zone_ready", n=len(paths)))
+        self._zone_auto_hide()
 
     def _toggle_dropzone(self, icon, item):
         cur = self.cfg["guard"].get("drop_zone", True)
         self.cfg["guard"]["drop_zone"] = not cur
         if self.dropzone:
             if cur:
-                self.dropzone.hide()
-            else:
-                self.dropzone.show()
+                self.dropzone.request_hide()
+            elif not self.cfg["guard"].get("drop_zone_auto", True):
+                self.dropzone.request_show()
         self._save_config()
         icon.update_menu()
 
-    def _mask_files_work(self):
-        import pythoncom
-        pythoncom.CoInitialize()
-        log.info("mask files work start")
-        try:
-            self._mask_files_inner()
-        except Exception as e:
-            log.exception("mask files work error: %s", e)
-        finally:
-            pythoncom.CoUninitialize()
+    def _zone_auto_show(self):
+        if self.dropzone and self.cfg["guard"].get("drop_zone", True) \
+                and self.cfg["guard"].get("drop_zone_auto", True):
+            if self._zone_hide_timer:
+                self._zone_hide_timer.cancel()
+                self._zone_hide_timer = None
+            self.dropzone.request_show()
 
-    def _mask_files_inner(self):
-        """拖拽走 OLE 不经过剪贴板，无法透明拦截；提供手动脱敏副本出口。"""
-        import ctypes
-        from ctypes import wintypes
-        import win32con
-        from .files import SUPPORTED_EXTS, UnsupportedFile, mask_file
-
-        class OFN(ctypes.Structure):
-            _fields_ = [
-                ("lStructSize", wintypes.DWORD),
-                ("hwndOwner", wintypes.HWND),
-                ("hInstance", wintypes.HANDLE),
-                ("lpstrFilter", wintypes.LPCWSTR),
-                ("lpstrCustomFilter", wintypes.LPWSTR),
-                ("nMaxCustFilter", wintypes.DWORD),
-                ("nFilterIndex", wintypes.DWORD),
-                ("lpstrFile", wintypes.LPWSTR),
-                ("nMaxFile", wintypes.DWORD),
-                ("lpstrFileTitle", wintypes.LPWSTR),
-                ("nMaxFileTitle", wintypes.DWORD),
-                ("lpstrInitialDir", wintypes.LPCWSTR),
-                ("lpstrTitle", wintypes.LPCWSTR),
-                ("Flags", wintypes.DWORD),
-                ("nFileOffset", wintypes.WORD),
-                ("nFileExtension", wintypes.WORD),
-                ("lpstrDefExt", wintypes.LPCWSTR),
-                ("lCustData", wintypes.LPARAM),
-                ("lpfnHook", ctypes.c_void_p),
-                ("lpTemplateName", wintypes.LPCWSTR),
-                ("pvReserved", ctypes.c_void_p),
-                ("dwReserved", wintypes.DWORD),
-                ("FlagsEx", wintypes.DWORD),
-            ]
-
-        buf = ctypes.create_unicode_buffer(4096)
-        ofn = OFN()
-        ofn.lStructSize = ctypes.sizeof(OFN)
-        ofn.hwndOwner = win32gui.GetForegroundWindow()
-        ofn.lpstrFilter = "Supported\0*" + ";*".join(sorted(SUPPORTED_EXTS)) + "\0All files\0*.*\0"
-        ofn.nFilterIndex = 1
-        ofn.lpstrFile = ctypes.cast(buf, wintypes.LPWSTR)
-        ofn.nMaxFile = 4096
-        ofn.lpstrTitle = t("mask_files")
-        ofn.Flags = (win32con.OFN_EXPLORER | win32con.OFN_FILEMUSTEXIST
-                     | win32con.OFN_PATHMUSTEXIST | win32con.OFN_NOCHANGEDIR)
-        fn = ctypes.windll.comdlg32.GetOpenFileNameW
-        fn.argtypes = [ctypes.POINTER(OFN)]
-        fn.restype = wintypes.BOOL
-        if not fn(ctypes.byref(ofn)):
-            log.info("mask files dialog cancelled (err=%s)", ctypes.windll.kernel32.GetLastError())
+    def _zone_auto_hide(self):
+        if not self.dropzone or not self.cfg["guard"].get("drop_zone_auto", True):
             return
-        src = Path(buf.value)
-        log.info("mask files dialog picked name=%s", src.name)
-        self.watcher.copies_dir.mkdir(parents=True, exist_ok=True)
-        dst = self.watcher.copies_dir / (src.stem + self.watcher.file_suffix + src.suffix)
-        try:
-            mask_file(src, self.masker, self.watcher.file_suffix, dst=dst)
-        except UnsupportedFile:
-            self.notify("privacy-input-layer", t("mask_files_none"))
-            return
-        except Exception as e:
-            log.warning("mask %s: %s", src, e)
-            self.notify("privacy-input-layer", t("mask_files_none"))
-            return
-        self.watcher.events.appendleft(f"{time.strftime('%H:%M:%S')} files masked 1 (manual)")
-        self.notify("privacy-input-layer", t("mask_files_done", n=1, dir=self.watcher.copies_dir))
-        os.startfile(str(self.watcher.copies_dir))
+        if self._zone_hide_timer:
+            self._zone_hide_timer.cancel()
+        self._zone_hide_timer = threading.Timer(1.2, self.dropzone.request_hide)
+        self._zone_hide_timer.daemon = True
+        self._zone_hide_timer.start()
 
     def _toggle_mode(self, icon, item):
         cur = self.cfg["guard"].get("mode", "focus")
@@ -303,7 +224,9 @@ class Application:
         if new == "focus":
             if not self.focus:
                 from .focus import ForegroundWatcher
-                self.focus = ForegroundWatcher(self.cfg, self._on_focus, on_drag=self._on_drag)
+                self.focus = ForegroundWatcher(self.cfg, self._on_focus, on_drag=self._on_drag,
+                                  on_drag_start=self._zone_auto_show,
+                                  on_drag_end=self._zone_auto_hide)
             self.focus.start()
         else:
             if self.focus:
@@ -331,9 +254,7 @@ class Application:
                 lambda item: t("mode_focus") if self.cfg["guard"].get("mode", "focus") == "focus" else t("mode_always"),
                 self._toggle_mode,
             ),
-            pystray.MenuItem(lambda item: t("recent"), self._recent_menu()),
             pystray.MenuItem(lambda item: t("restore_now"), self._restore_now),
-            pystray.MenuItem(lambda item: t("mask_files"), self._mask_files),
             pystray.MenuItem(lambda item: t("sendto_install"), self._install_sendto),
             pystray.MenuItem(
                 lambda item: t("zone_on") if self.cfg["guard"].get("drop_zone", True) else t("zone_off"),
@@ -403,6 +324,8 @@ class Application:
             self.focus.start()
         if self.dropzone and self.cfg["guard"].get("drop_zone", True):
             self.dropzone.start()
+            if not self.cfg["guard"].get("drop_zone_auto", True):
+                self.dropzone.request_show()
         if self.cfg["guard"].get("update_check", False):
             self._check_update()
 
