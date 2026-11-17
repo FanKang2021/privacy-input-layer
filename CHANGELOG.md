@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.9
+
+### Fixed
+- Tray "Mask file…" dialog could open behind other windows (hwndOwner=0 on a
+  background thread); now owned by the foreground window, filter index set,
+  and cancel/pick logged
+
+### Added
+- Drag-warning diagnostics: mouse-hook event heartbeat, candidate drain log,
+  and early-return reason logs to pinpoint why a drag did not warn
+
 ## 0.5.8
 
 ### Fixed

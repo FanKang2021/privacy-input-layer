@@ -233,6 +233,9 @@ class ForegroundWatcher:
         self._mouse_tid = None
         self._drag_track = None
         self._drag_candidate = None
+        self._mouse_events = 0
+        self._mouse_events_logged = 0
+        self._mouse_log_at = 0.0
         self._threads = []
         self._heur_cache = None
 
@@ -314,9 +317,15 @@ class ForegroundWatcher:
         try:
             last_title = None
             while not self._stop.wait(0.3):
+                now = time.time()
+                if now - self._mouse_log_at > 5 and self._mouse_events != self._mouse_events_logged:
+                    log.info("mouse hook events=%d", self._mouse_events)
+                    self._mouse_events_logged = self._mouse_events
+                    self._mouse_log_at = now
                 cand = self._drag_candidate
                 if cand:
                     self._drag_candidate = None
+                    log.info("drag candidate %s->%s", cand[0], cand[1])
                     try:
                         self._evaluate_drag(cand)
                     except Exception as e:
@@ -356,6 +365,7 @@ class ForegroundWatcher:
         # LL 回调只做轻量记录；进程解析/分类留给 _poll 线程。
         # 落点用光标下窗口而非前台：拖入后台窗口不一定激活它
         if ncode >= 0:
+            self._mouse_events += 1
             ms = ctypes.cast(lparam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
             x, y = ms.pt.x, ms.pt.y
             if wparam == WM_LBUTTONDOWN:
@@ -374,10 +384,12 @@ class ForegroundWatcher:
     def _evaluate_drag(self, cand):
         start, end = cand
         if not start or not end or start == end:
+            log.info("drag skip same/zero window (%s,%s)", start, end)
             return
         proc_s = process_name(start)
         proc_e = process_name(end)
         if not proc_e or proc_s == proc_e:
+            log.info("drag skip same proc %s", proc_s)
             return  # 同应用内划选/框选，不是跨应用拖放
         title = win32gui.GetWindowText(end)
         url = browser_url(end) if proc_e in self._browsers() else None

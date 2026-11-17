@@ -231,7 +231,9 @@ class Application:
         buf = ctypes.create_unicode_buffer(4096)
         ofn = OFN()
         ofn.lStructSize = ctypes.sizeof(OFN)
+        ofn.hwndOwner = win32gui.GetForegroundWindow()
         ofn.lpstrFilter = "Supported\0*" + ";*".join(sorted(SUPPORTED_EXTS)) + "\0All files\0*.*\0"
+        ofn.nFilterIndex = 1
         ofn.lpstrFile = ctypes.cast(buf, wintypes.LPWSTR)
         ofn.nMaxFile = 4096
         ofn.lpstrTitle = t("mask_files")
@@ -241,8 +243,10 @@ class Application:
         fn.argtypes = [ctypes.POINTER(OFN)]
         fn.restype = wintypes.BOOL
         if not fn(ctypes.byref(ofn)):
+            log.info("mask files dialog cancelled (err=%s)", ctypes.windll.kernel32.GetLastError())
             return
         src = Path(buf.value)
+        log.info("mask files dialog picked name=%s", src.name)
         self.watcher.copies_dir.mkdir(parents=True, exist_ok=True)
         dst = self.watcher.copies_dir / (src.stem + self.watcher.file_suffix + src.suffix)
         try:
