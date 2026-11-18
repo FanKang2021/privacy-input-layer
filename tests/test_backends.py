@@ -80,25 +80,42 @@ def test_config_migration_old_injection_default(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="win32 mouse hook only")
-def test_drag_gesture_fires_show_hide_callbacks():
+def test_drag_gesture_fires_show_hide_callbacks(monkeypatch):
     import ctypes as c
     from pilayer.focus import ForegroundWatcher, MSLLHOOKSTRUCT
-    starts, ends = [], []
-    w = ForegroundWatcher({}, lambda ai: None,
-                          on_drag_start=lambda: starts.append(1),
-                          on_drag_end=lambda: ends.append(1))
 
     def ev(x, y):
         m = MSLLHOOKSTRUCT()
         m.pt.x, m.pt.y = x, y
         return c.byref(m)
 
+    # 拖出源窗口（1→2）才触发 show
+    starts, ends = [], []
+    w = ForegroundWatcher({}, lambda ai: None,
+                          on_drag_start=lambda: starts.append(1),
+                          on_drag_end=lambda: ends.append(1))
+    monkeypatch.setattr(w, "_root_at", lambda x, y: 1 if (x, y) == (0, 0) else 2)
     w._mouse_cb(0, 0x0201, ev(0, 0))
+    w._mouse_cb(0, 0x0200, ev(10, 10))
+    assert starts == []  # 位移不足
     w._mouse_cb(0, 0x0200, ev(60, 60))
+    assert starts == [1]  # 拖出源窗口触发一次
     w._mouse_cb(0, 0x0200, ev(80, 80))
-    assert starts == [1]  # 越过阈值只触发一次
+    assert starts == [1]  # 不重复触发
     w._mouse_cb(0, 0x0202, ev(80, 80))
     assert ends == [1]
+
+    # 源窗口内 rearrange（始终窗口1）不触发 show
+    starts2 = []
+    w2 = ForegroundWatcher({}, lambda ai: None,
+                           on_drag_start=lambda: starts2.append(1),
+                           on_drag_end=lambda: None)
+    monkeypatch.setattr(w2, "_root_at", lambda x, y: 1)
+    w2._mouse_cb(0, 0x0201, ev(0, 0))
+    w2._mouse_cb(0, 0x0200, ev(60, 60))
+    w2._mouse_cb(0, 0x0200, ev(90, 90))
+    w2._mouse_cb(0, 0x0202, ev(90, 90))
+    assert starts2 == []
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="win32 tray/watcher only")

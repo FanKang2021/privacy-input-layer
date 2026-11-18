@@ -397,7 +397,7 @@ class ForegroundWatcher:
             ms = ctypes.cast(lparam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
             x, y = ms.pt.x, ms.pt.y
             if wparam == WM_LBUTTONDOWN:
-                self._drag_track = [self._root_at(x, y), x, y, time.time(), 0, 0]
+                self._drag_track = [self._root_at(x, y), x, y, time.time(), 0, 0, 0]
             elif wparam == WM_MOUSEMOVE and self._drag_track:
                 t = self._drag_track
                 t[4] += abs(x - t[1]) + abs(y - t[2])
@@ -405,11 +405,16 @@ class ForegroundWatcher:
                 if t[4] > 32 and not t[5]:
                     t[5] = 1
                     self.last_drag_src = t[0]
-                    if self.on_drag_start:
-                        try:
-                            self.on_drag_start()
-                        except Exception:
-                            pass
+                # 光标移到另一个顶层窗口才算"拖出"（桌面/任务栏内 rearrange 不弹）
+                if t[5] and not t[6]:
+                    over = self._root_at(x, y)
+                    if over and over != t[0]:
+                        t[6] = 1
+                        if self.on_drag_start:
+                            try:
+                                self.on_drag_start()
+                            except Exception:
+                                pass
             elif wparam == WM_LBUTTONUP and self._drag_track:
                 t = self._drag_track
                 self._drag_track = None

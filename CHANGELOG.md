@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.6
+
+### Fixed
+- Drop zone popped for desktop-icon and taskbar-button rearrange (both are
+  explorer.exe with unreadable selection, hitting the desktop fallback). Now
+  auto-show only fires when the drag cursor leaves the source window onto a
+  different top-level window; in-source rearrange never pops it
+
 ## 0.6.5
 
 ### Fixed
