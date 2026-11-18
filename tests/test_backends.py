@@ -137,7 +137,11 @@ def test_zone_auto_show_only_supported_explorer_drag(monkeypatch):
     shown.clear()
     monkeypatch.setattr(a, "_selection_names", lambda h: ["photo.raw"])
     a._zone_show_if_supported(1)
-    assert shown == []  # 不支持格式不弹
+    assert shown == []  # 文件夹窗口不支持格式不弹
+    monkeypatch.setattr(a, "_selection_names", lambda h: [])
+    a._zone_show_if_supported(1)
+    assert shown == [1]  # 桌面读不到选中项按文件拖拽放行
+    shown.clear()
     monkeypatch.setattr("pilayer.focus.process_name", lambda h: "notepad.exe")
     a._zone_show_if_supported(1)
     assert shown == []  # 文本划选源不弹

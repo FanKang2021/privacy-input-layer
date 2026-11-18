@@ -43,7 +43,7 @@ pilayer install-sendto        # optional: right-click "Send to -> Masked copy"
 
 No terminal needed: double-click `start-guard.bat` in the project root (no console window).
 
-Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **mode focus/always**, **Start with Windows**, **Restore clipboard now**, **Install SendTo entry**, **Drop zone on/off**, **Check for updates** (manual; opt-in auto via `update_check`), open config, open data dir, quit. The drop zone auto-shows only for Explorer drags of supported file types and hides shortly after (`guard.drop_zone_auto`); closing it with X only hides it.
+Tray icon: blue = guarding, gray = paused. Tray menu: guard on/paused, **notifications on/off (silent mode)**, **language English/中文**, **mode focus/always**, **Start with Windows**, **Restore clipboard now**, **Install SendTo entry**, **Drop zone on/off**, **Check for updates** (manual; opt-in auto via `update_check`), open config, open data dir, quit. The drop zone auto-shows for Explorer file drags (folder selections filtered to supported types via Shell COM; desktop drags shown, unsupported rejected at drop) and hides shortly after (`guard.drop_zone_auto`); closing it with X only hides it.
 
 Prebuilt binaries: see [Releases](https://github.com/FanKang2021/privacy-input-layer/releases) (Windows / macOS-arm64 / Linux-x86_64).
 

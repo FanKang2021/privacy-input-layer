@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.5
+
+### Fixed
+- Drop zone never auto-showed for txt/docx: Explorer/desktop UIA trees are
+  sparse in background so selection read returned empty and the format filter
+  always rejected. Now read folder-window selection via Shell COM
+  SelectedItems (foreground-independent); desktop drags (selection unreadable)
+  are treated as file drags and unsupported formats rejected at drop
+
 ## 0.6.4
 
 ### Changed

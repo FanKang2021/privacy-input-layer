@@ -209,13 +209,14 @@ class Application:
         threading.Thread(target=self._zone_show_if_supported, args=(src,), daemon=True).start()
 
     def _zone_show_if_supported(self, src):
-        """仅 Explorer 拖拽且选中项含已支持格式才弹浮窗；文本划选/不支持格式不弹。"""
+        """仅 Explorer 文件拖拽才弹浮窗；文件夹窗口用 Shell COM 读选中项过滤
+        支持格式；桌面拖拽读不到选中项时按文件拖拽放行（drop 时再拒绝不支持）。"""
         from .focus import process_name
         from .files import SUPPORTED_EXTS
         if process_name(src) != "explorer.exe":
             return
         names = self._selection_names(src)
-        if not any(Path(n).suffix.lower() in SUPPORTED_EXTS for n in names):
+        if names and not any(Path(n).suffix.lower() in SUPPORTED_EXTS for n in names):
             return
         if self._zone_hide_timer:
             self._zone_hide_timer.cancel()
@@ -223,29 +224,22 @@ class Application:
         self.dropzone.request_show()
 
     def _selection_names(self, hwnd):
+        # UIA 树在后台极稀疏读不到选中项；Shell COM SelectedItems 不依赖前台
         try:
-            import uiautomation as auto
-            root = auto.ControlFromHandle(hwnd)
-            if root is None:
-                return []
-            queue = [(root, 0)]
-            seen = 0
-            while queue and seen < 200:
-                c, d = queue.pop(0)
-                seen += 1
-                if d > 4:
-                    continue
-                if c.ControlTypeName in ("ListControl", "DataGridControl", "TreeControl"):
+            import pythoncom
+            import win32com.client
+            pythoncom.CoInitialize()
+            try:
+                shell = win32com.client.Dispatch("Shell.Application")
+                for w in shell.Windows():
                     try:
-                        sel = c.GetSelectionPattern().GetCurrentSelection()
-                        return [x.Name for x in sel if x.Name]
+                        if int(w.HWND) == hwnd:
+                            return [i.Name for i in w.Document.SelectedItems()]
                     except Exception:
-                        pass
-                ch = c.GetFirstChildControl()
-                while ch is not None:
-                    queue.append((ch, d + 1))
-                    ch = ch.GetNextSiblingControl()
-            return []
+                        continue
+                return []
+            finally:
+                pythoncom.CoUninitialize()
         except Exception:
             return []
 
