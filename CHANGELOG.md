@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4
+
+### Changed
+- Drop zone auto-show now only for Explorer drags whose selection contains a
+  supported file type (reads selection via UIA SelectionPattern off-hook);
+  text-selection drags and unsupported formats no longer pop the zone
+
 ## 0.6.3
 
 ### Changed

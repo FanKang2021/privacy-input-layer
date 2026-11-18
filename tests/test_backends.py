@@ -125,6 +125,25 @@ def test_drag_start_hook_warns():
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="win32 tray only")
+def test_zone_auto_show_only_supported_explorer_drag(monkeypatch):
+    from pilayer.app import Application
+    a = Application()
+    shown = []
+    monkeypatch.setattr(a.dropzone, "request_show", lambda: shown.append(1))
+    monkeypatch.setattr("pilayer.focus.process_name", lambda h: "explorer.exe")
+    monkeypatch.setattr(a, "_selection_names", lambda h: ["creds.txt"])
+    a._zone_show_if_supported(1)
+    assert shown == [1]
+    shown.clear()
+    monkeypatch.setattr(a, "_selection_names", lambda h: ["photo.raw"])
+    a._zone_show_if_supported(1)
+    assert shown == []  # 不支持格式不弹
+    monkeypatch.setattr("pilayer.focus.process_name", lambda h: "notepad.exe")
+    a._zone_show_if_supported(1)
+    assert shown == []  # 文本划选源不弹
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="win32 tray only")
 def test_update_manual_opens_release_page(monkeypatch):
     from pilayer.app import Application
     a = Application()

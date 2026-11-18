@@ -259,6 +259,7 @@ class ForegroundWatcher:
         self._mouse_events_logged = 0
         self._mouse_log_at = 0.0
         self.last_ai_hwnd = None
+        self.last_drag_src = None
         self._threads = []
         self._heur_cache = None
 
@@ -403,6 +404,7 @@ class ForegroundWatcher:
                 t[1], t[2] = x, y
                 if t[4] > 32 and not t[5]:
                     t[5] = 1
+                    self.last_drag_src = t[0]
                     if self.on_drag_start:
                         try:
                             self.on_drag_start()

@@ -200,12 +200,54 @@ class Application:
         icon.update_menu()
 
     def _zone_auto_show(self):
-        if self.dropzone and self.cfg["guard"].get("drop_zone", True) \
-                and self.cfg["guard"].get("drop_zone_auto", True):
-            if self._zone_hide_timer:
-                self._zone_hide_timer.cancel()
-                self._zone_hide_timer = None
-            self.dropzone.request_show()
+        if not (self.dropzone and self.cfg["guard"].get("drop_zone", True)
+                and self.cfg["guard"].get("drop_zone_auto", True)):
+            return
+        src = self.focus.last_drag_src if self.focus else None
+        if not src:
+            return
+        threading.Thread(target=self._zone_show_if_supported, args=(src,), daemon=True).start()
+
+    def _zone_show_if_supported(self, src):
+        """仅 Explorer 拖拽且选中项含已支持格式才弹浮窗；文本划选/不支持格式不弹。"""
+        from .focus import process_name
+        from .files import SUPPORTED_EXTS
+        if process_name(src) != "explorer.exe":
+            return
+        names = self._selection_names(src)
+        if not any(Path(n).suffix.lower() in SUPPORTED_EXTS for n in names):
+            return
+        if self._zone_hide_timer:
+            self._zone_hide_timer.cancel()
+            self._zone_hide_timer = None
+        self.dropzone.request_show()
+
+    def _selection_names(self, hwnd):
+        try:
+            import uiautomation as auto
+            root = auto.ControlFromHandle(hwnd)
+            if root is None:
+                return []
+            queue = [(root, 0)]
+            seen = 0
+            while queue and seen < 200:
+                c, d = queue.pop(0)
+                seen += 1
+                if d > 4:
+                    continue
+                if c.ControlTypeName in ("ListControl", "DataGridControl", "TreeControl"):
+                    try:
+                        sel = c.GetSelectionPattern().GetCurrentSelection()
+                        return [x.Name for x in sel if x.Name]
+                    except Exception:
+                        pass
+                ch = c.GetFirstChildControl()
+                while ch is not None:
+                    queue.append((ch, d + 1))
+                    ch = ch.GetNextSiblingControl()
+            return []
+        except Exception:
+            return []
 
     def _zone_auto_hide(self):
         if not self.dropzone or not self.cfg["guard"].get("drop_zone_auto", True):

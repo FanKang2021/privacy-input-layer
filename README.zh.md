@@ -43,7 +43,7 @@ pilayer install-sendto        # 可选：右键「发送到 -> Masked copy」
 
 不想开终端：双击项目根目录的 `start-guard.bat`（无控制台窗口）。
 
-托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**模式 focus/always**、**开机自启**、**立即还原剪贴板**、**安装右键发送到入口**、**脱敏浮窗开/关**、**检查更新**（手动；`update_check` 可 opt-in 自动）、打开配置、打开数据目录、退出。浮窗拖拽时自动弹出、松手后延时隐藏（`guard.drop_zone_auto`）；点 X 仅隐藏可再开。
+托盘图标：蓝色 = 守卫开启，灰色 = 暂停。托盘菜单：守卫开关、**通知开/关（静默模式）**、**语言 English/中文**、**模式 focus/always**、**开机自启**、**立即还原剪贴板**、**安装右键发送到入口**、**脱敏浮窗开/关**、**检查更新**（手动；`update_check` 可 opt-in 自动）、打开配置、打开数据目录、退出。浮窗仅对 Explorer 拖拽已支持格式文件自动弹出、松手后延时隐藏（`guard.drop_zone_auto`）；点 X 仅隐藏可再开。
 
 预构建产物见 [Releases](https://github.com/FanKang2021/privacy-input-layer/releases)（Windows / macOS-arm64 / Linux-x86_64）。
 
